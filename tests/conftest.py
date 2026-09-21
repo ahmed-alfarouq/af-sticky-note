@@ -1,8 +1,5 @@
-"""Shared pytest fixtures.
-
-All fixtures use pytest's tmp_path (via db_path), never the real
-application-data directory — tests never touch a real user's database.
-"""
+"""Shared pytest fixtures. All use pytest's tmp_path — never a real
+application-data directory."""
 import random
 
 import pytest
@@ -14,6 +11,7 @@ from app.database.migrations import apply_migrations
 from app.database.quote_repository import QuoteRepository
 from app.database.quote_rotation_state_repository import QuoteRotationStateRepository
 from app.database.quote_usage_repository import QuoteUsageRepository
+from app.database.unit_of_work import UnitOfWork
 
 
 @pytest.fixture()
@@ -50,16 +48,19 @@ def rotation_state_repo(db_connection):
 
 
 @pytest.fixture()
-def make_quote_service(quote_repo, day_repo, quote_usage_repo, rotation_state_repo):
-    """Factory fixture: build a QuoteService with test-controlled randomness.
+def unit_of_work(db_connection):
+    """A UnitOfWork bound to the same test connection every other
+    fixture here uses. Tests that need to verify state via a raw
+    query can use unit_of_work._conn for that — it is the same
+    object as db_connection."""
+    return UnitOfWork(db_connection)
 
-    Defaults to favorite_selection_probability=0.0 (never pick a
-    favorite) so tests that don't care about favorites get plain,
-    deterministic rotation behavior without extra setup.
-    """
 
+@pytest.fixture()
+def make_quote_service(db_connection, quote_repo, day_repo, quote_usage_repo, rotation_state_repo):
     def _make(favorite_selection_probability: float = 0.0, random_source=None):
         return QuoteService(
+            conn=db_connection,
             quote_repo=quote_repo,
             day_repo=day_repo,
             quote_usage_repo=quote_usage_repo,

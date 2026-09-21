@@ -24,22 +24,16 @@ class TaskRepository:
         return self._row_to_task(row) if row else None
 
     def create(self, day_id: int, text: str, position: Optional[int] = None) -> Task:
-        """Create a task under day_id.
-
-        Raises sqlite3.IntegrityError if day_id does not reference an
-        existing Day — foreign-key enforcement prevents orphan tasks.
-        """
         if position is None:
             position = self._next_position(day_id)
         now = utc_now_iso()
-        with self._conn:
-            cursor = self._conn.execute(
-                """
-                INSERT INTO tasks (day_id, text, is_completed, position, created_at, updated_at)
-                VALUES (?, ?, 0, ?, ?, ?)
-                """,
-                (day_id, text, position, now, now),
-            )
+        cursor = self._conn.execute(
+            """
+            INSERT INTO tasks (day_id, text, is_completed, position, created_at, updated_at)
+            VALUES (?, ?, 0, ?, ?, ?)
+            """,
+            (day_id, text, position, now, now),
+        )
         return Task(
             id=cursor.lastrowid,
             day_id=day_id,
@@ -52,23 +46,20 @@ class TaskRepository:
 
     def update_text(self, task_id: int, text: str) -> None:
         now = utc_now_iso()
-        with self._conn:
-            self._conn.execute(
-                "UPDATE tasks SET text = ?, updated_at = ? WHERE id = ?",
-                (text, now, task_id),
-            )
+        self._conn.execute(
+            "UPDATE tasks SET text = ?, updated_at = ? WHERE id = ?",
+            (text, now, task_id),
+        )
 
     def set_completed(self, task_id: int, is_completed: bool) -> None:
         now = utc_now_iso()
-        with self._conn:
-            self._conn.execute(
-                "UPDATE tasks SET is_completed = ?, updated_at = ? WHERE id = ?",
-                (int(is_completed), now, task_id),
-            )
+        self._conn.execute(
+            "UPDATE tasks SET is_completed = ?, updated_at = ? WHERE id = ?",
+            (int(is_completed), now, task_id),
+        )
 
     def delete(self, task_id: int) -> None:
-        with self._conn:
-            self._conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        self._conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
 
     def _next_position(self, day_id: int) -> int:
         row = self._conn.execute(

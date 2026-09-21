@@ -1,9 +1,4 @@
-"""Persistence for quote-usage history (which quote was used on which
-day, in which cycle, and whether it was a favorite pick).
-
-This table is the durable state that makes cycle-level non-repetition
-possible across application restarts — it is never held only in memory.
-"""
+"""Persistence for quote-usage history."""
 from __future__ import annotations
 
 import sqlite3
@@ -21,14 +16,13 @@ class QuoteUsageRepository:
         self, day_id: int, quote_id: int, cycle_number: int, is_favorite_selection: bool
     ) -> QuoteUsage:
         now = utc_now_iso()
-        with self._conn:
-            cursor = self._conn.execute(
-                """
-                INSERT INTO quote_usage (day_id, quote_id, cycle_number, is_favorite_selection, selected_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (day_id, quote_id, cycle_number, int(is_favorite_selection), now),
-            )
+        cursor = self._conn.execute(
+            """
+            INSERT INTO quote_usage (day_id, quote_id, cycle_number, is_favorite_selection, selected_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (day_id, quote_id, cycle_number, int(is_favorite_selection), now),
+        )
         return QuoteUsage(
             id=cursor.lastrowid,
             day_id=day_id,
@@ -39,7 +33,6 @@ class QuoteUsageRepository:
         )
 
     def get_consumed_normal_ids(self, cycle_number: int) -> Set[int]:
-        """Quote IDs already used as a normal (non-favorite) pick in this cycle."""
         rows = self._conn.execute(
             "SELECT quote_id FROM quote_usage WHERE cycle_number = ? AND is_favorite_selection = 0",
             (cycle_number,),

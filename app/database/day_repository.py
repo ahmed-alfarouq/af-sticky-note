@@ -1,4 +1,10 @@
-"""Persistence for daily records. UI and core layers never touch SQL directly."""
+"""Persistence for daily records. UI and core layers never touch SQL directly.
+
+Statements commit immediately when called standalone (autocommit
+connection mode) or participate in an ambient explicit transaction
+opened by a caller via transaction(conn). This repository never
+calls commit()/rollback() itself.
+"""
 from __future__ import annotations
 
 import sqlite3
@@ -22,11 +28,10 @@ class DayRepository:
 
     def create(self, date: str) -> Day:
         now = utc_now_iso()
-        with self._conn:
-            cursor = self._conn.execute(
-                "INSERT INTO days (date, quote_text, created_at, updated_at) VALUES (?, NULL, ?, ?)",
-                (date, now, now),
-            )
+        cursor = self._conn.execute(
+            "INSERT INTO days (date, quote_text, created_at, updated_at) VALUES (?, NULL, ?, ?)",
+            (date, now, now),
+        )
         return Day(id=cursor.lastrowid, date=date, quote_text=None, created_at=now, updated_at=now)
 
     def get_or_create(self, date: str) -> Day:
@@ -36,14 +41,14 @@ class DayRepository:
         return self.create(date)
 
     def set_quote_text(self, day_id: int, quote_text: str) -> Day:
-        """Attach the assigned quote's text to a Day as its historical snapshot."""
         now = utc_now_iso()
-        with self._conn:
-            self._conn.execute(
-                "UPDATE days SET quote_text = ?, updated_at = ? WHERE id = ?",
-                (quote_text, now, day_id),
-            )
-        return self.get_by_id(day_id)
+        self._conn.execute(
+            "UPDATE days SET quote_text = ?, updated_at = ? WHERE id = ?",
+            (quote_text, now, day_id),
+        )
+        updated_day = self.get_by_id(day_id)
+        assert updated_day is not None, f"Day {day_id} vanished immediately after its own update"
+        return updated_day
 
     @staticmethod
     def _row_to_day(row: sqlite3.Row) -> Day:

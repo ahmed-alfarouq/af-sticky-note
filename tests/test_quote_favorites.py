@@ -13,7 +13,7 @@ def test_favorite_can_repeat_before_normal_cycle_exhausted(quote_repo, make_quot
 
 
 def test_selecting_favorite_does_not_consume_normal_cycle(
-    quote_repo, day_repo, quote_usage_repo, rotation_state_repo
+    db_connection, quote_repo, day_repo, quote_usage_repo, rotation_state_repo
 ):
     from app.core.services.quote_service import QuoteService
 
@@ -22,13 +22,13 @@ def test_selecting_favorite_does_not_consume_normal_cycle(
     quote_repo.create("مفضلة", is_favorite=True)
 
     service_fav = QuoteService(
-        quote_repo, day_repo, quote_usage_repo, rotation_state_repo,
+        db_connection, quote_repo, day_repo, quote_usage_repo, rotation_state_repo,
         favorite_selection_probability=1.0, random_source=random.Random(1),
     )
     service_fav.get_or_assign_daily_quote("2026-09-01")
 
     service_normal = QuoteService(
-        quote_repo, day_repo, quote_usage_repo, rotation_state_repo,
+        db_connection, quote_repo, day_repo, quote_usage_repo, rotation_state_repo,
         favorite_selection_probability=0.0, random_source=random.Random(2),
     )
     texts = [

@@ -24,14 +24,14 @@ def test_fifth_selection_starts_new_cycle(quote_repo, make_quote_service):
 
 
 def test_reopening_mid_cycle_does_not_reset_it(
-    quote_repo, day_repo, quote_usage_repo, rotation_state_repo
+    db_connection, quote_repo, day_repo, quote_usage_repo, rotation_state_repo
 ):
     from app.core.services.quote_service import QuoteService
 
     _add_normal_quotes(quote_repo, ["A", "B", "C", "D"])
 
     service1 = QuoteService(
-        quote_repo, day_repo, quote_usage_repo, rotation_state_repo,
+        db_connection, quote_repo, day_repo, quote_usage_repo, rotation_state_repo,
         favorite_selection_probability=0.0, random_source=random.Random(1),
     )
     used = [
@@ -41,7 +41,7 @@ def test_reopening_mid_cycle_does_not_reset_it(
 
     # A brand new QuoteService instance, simulating the app reopening.
     service2 = QuoteService(
-        quote_repo, day_repo, quote_usage_repo, rotation_state_repo,
+        db_connection, quote_repo, day_repo, quote_usage_repo, rotation_state_repo,
         favorite_selection_probability=0.0, random_source=random.Random(99),
     )
     remaining = [

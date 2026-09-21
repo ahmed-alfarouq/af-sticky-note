@@ -30,7 +30,7 @@ def test_restart_simulation_returns_same_quote(db_path):
     apply_migrations(conn1)
     QuoteRepository(conn1).create("ابدأ بما تستطيع.")
     service1 = QuoteService(
-        QuoteRepository(conn1), DayRepository(conn1),
+        conn1, QuoteRepository(conn1), DayRepository(conn1),
         QuoteUsageRepository(conn1), QuoteRotationStateRepository(conn1),
     )
     first = service1.get_or_assign_daily_quote("2026-09-21")
@@ -39,7 +39,7 @@ def test_restart_simulation_returns_same_quote(db_path):
     conn2 = create_connection(db_path)
     apply_migrations(conn2)  # already-applied migrations are a no-op
     service2 = QuoteService(
-        QuoteRepository(conn2), DayRepository(conn2),
+        conn2, QuoteRepository(conn2), DayRepository(conn2),
         QuoteUsageRepository(conn2), QuoteRotationStateRepository(conn2),
     )
     second = service2.get_or_assign_daily_quote("2026-09-21")

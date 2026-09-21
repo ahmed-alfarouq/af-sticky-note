@@ -17,13 +17,17 @@ class QuoteRepository:
         return [self._row_to_quote(row) for row in rows]
 
     def list_normal(self) -> List[Quote]:
-        """Non-favorite quotes — the pool the rotation cycle draws from."""
+        """Quotes with is_favorite = 0, as of right now. This defines
+        normal-pool membership at selection time — a quote's pool
+        membership always reflects its current favorite status, not
+        its status at any past selection."""
         rows = self._conn.execute(
             "SELECT * FROM quotes WHERE is_favorite = 0 ORDER BY id ASC"
         ).fetchall()
         return [self._row_to_quote(row) for row in rows]
 
     def list_favorites(self) -> List[Quote]:
+        """Quotes with is_favorite = 1, as of right now — see list_normal()."""
         rows = self._conn.execute(
             "SELECT * FROM quotes WHERE is_favorite = 1 ORDER BY id ASC"
         ).fetchall()
@@ -39,14 +43,13 @@ class QuoteRepository:
 
     def create(self, text: str, is_favorite: bool = False, is_user_created: bool = False) -> Quote:
         now = utc_now_iso()
-        with self._conn:
-            cursor = self._conn.execute(
-                """
-                INSERT INTO quotes (text, is_favorite, is_user_created, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (text, int(is_favorite), int(is_user_created), now, now),
-            )
+        cursor = self._conn.execute(
+            """
+            INSERT INTO quotes (text, is_favorite, is_user_created, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (text, int(is_favorite), int(is_user_created), now, now),
+        )
         return Quote(
             id=cursor.lastrowid,
             text=text,
@@ -58,11 +61,10 @@ class QuoteRepository:
 
     def set_favorite(self, quote_id: int, is_favorite: bool) -> None:
         now = utc_now_iso()
-        with self._conn:
-            self._conn.execute(
-                "UPDATE quotes SET is_favorite = ?, updated_at = ? WHERE id = ?",
-                (int(is_favorite), now, quote_id),
-            )
+        self._conn.execute(
+            "UPDATE quotes SET is_favorite = ?, updated_at = ? WHERE id = ?",
+            (int(is_favorite), now, quote_id),
+        )
 
     @staticmethod
     def _row_to_quote(row: sqlite3.Row) -> Quote:

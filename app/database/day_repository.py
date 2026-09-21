@@ -21,12 +21,6 @@ class DayRepository:
         return self._row_to_day(row) if row else None
 
     def create(self, date: str) -> Day:
-        """Create a new Day for the given local calendar date (YYYY-MM-DD).
-
-        Raises sqlite3.IntegrityError if a Day for that date already
-        exists (date has a UNIQUE constraint). Callers wanting
-        "load or create" semantics should use get_or_create.
-        """
         now = utc_now_iso()
         with self._conn:
             cursor = self._conn.execute(
@@ -36,15 +30,20 @@ class DayRepository:
         return Day(id=cursor.lastrowid, date=date, quote_text=None, created_at=now, updated_at=now)
 
     def get_or_create(self, date: str) -> Day:
-        """Load the Day for this date if it exists; otherwise create it.
-
-        Never copies tasks or state from any other day — a new Day
-        always starts empty.
-        """
         existing = self.get_by_date(date)
         if existing is not None:
             return existing
         return self.create(date)
+
+    def set_quote_text(self, day_id: int, quote_text: str) -> Day:
+        """Attach the assigned quote's text to a Day as its historical snapshot."""
+        now = utc_now_iso()
+        with self._conn:
+            self._conn.execute(
+                "UPDATE days SET quote_text = ?, updated_at = ? WHERE id = ?",
+                (quote_text, now, day_id),
+            )
+        return self.get_by_id(day_id)
 
     @staticmethod
     def _row_to_day(row: sqlite3.Row) -> Day:

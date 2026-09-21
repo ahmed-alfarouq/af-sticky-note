@@ -33,3 +33,16 @@ class Quote:
     is_user_created: bool
     created_at: str
     updated_at: str
+
+
+@dataclass(frozen=True)
+class QuoteUsage:
+    """Historical record of which quote was assigned to which day,
+    and whether it was drawn from the favorite pool or the normal
+    rotation."""
+    id: Optional[int]
+    day_id: int
+    quote_id: int
+    cycle_number: int
+    is_favorite_selection: bool
+    selected_at: str

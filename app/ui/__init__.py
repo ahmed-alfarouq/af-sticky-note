@@ -1,0 +1,1 @@
+"""UI layer: Qt widgets and presentation only. No SQL, no business logic."""

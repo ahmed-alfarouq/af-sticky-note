@@ -1,0 +1,1 @@
+"""Domain/business logic layer: tasks, dates, quotes. No Qt, no SQL."""

@@ -1,0 +1,1 @@
+"""Cross-cutting concerns: logging, app-data paths, error handling."""

@@ -1,0 +1,1 @@
+"""OS-specific behavior (window pinning, taskbar, startup registration)."""

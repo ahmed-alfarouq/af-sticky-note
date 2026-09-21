@@ -1,0 +1,1 @@
+"""Persistence layer: SQLite access and repositories. No Qt widgets."""

@@ -1,0 +1,35 @@
+"""Domain models: plain data, no Qt, no SQL, no repositories."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional
+
+
+@dataclass(frozen=True)
+class Task:
+    id: Optional[int]
+    day_id: int
+    text: str
+    is_completed: bool
+    position: int
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class Day:
+    id: Optional[int]
+    date: str  # local calendar date, YYYY-MM-DD — never derived from UTC
+    quote_text: Optional[str]
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class Quote:
+    id: Optional[int]
+    text: str
+    is_favorite: bool
+    is_user_created: bool
+    created_at: str
+    updated_at: str

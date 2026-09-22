@@ -115,6 +115,10 @@ class MainWindow(QMainWindow):
         Crucial rule: TaskInput is only cleared AFTER task creation succeeds.
         If validation or persistence fails, raw text remains untouched.
         """
+        if self._day.id is None:
+            logger.error("Cannot create task: day.id is None")
+            return
+
         try:
             created_task = self._task_service.create_task(self._day.id, raw_text)
             if created_task is not None:

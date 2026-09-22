@@ -123,14 +123,14 @@ def get_application_stylesheet() -> str:
     }}
 
     QLabel#taskTextLabel {{
-        qproperty-alignment: 'AlignRight | AlignVCenter';
+        qproperty-alignment: AlignRight | AlignVCenter;
         color: {COLOR_TEXT_PRIMARY};
         font-size: 14px;
         font-weight: 500;
     }}
 
     QLabel#taskTextLabelCompleted {{
-        qproperty-alignment: 'AlignRight | AlignVCenter';
+        qproperty-alignment: AlignRight | AlignVCenter;
         color: {COLOR_TEXT_COMPLETED};
         font-size: 14px;
         text-decoration: line-through;
@@ -164,7 +164,7 @@ def get_application_stylesheet() -> str:
 
     /* Task Input Field */
     QLineEdit#taskInputField {{
-        qproperty-alignment: 'AlignRight | AlignVCenter';
+        qproperty-alignment: AlignRight | AlignVCenter;
         background-color: {COLOR_INPUT_BG};
         color: {COLOR_TEXT_PRIMARY};
         border: 1.5px solid {COLOR_BORDER};

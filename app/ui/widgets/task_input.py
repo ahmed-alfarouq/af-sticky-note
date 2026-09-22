@@ -15,8 +15,7 @@ class TaskInput(QLineEdit):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("taskInputField")
-        # Prepend Unicode Right-To-Left Mark (\u200F) so neutral prefix '+' anchors to the right
-        self.setPlaceholderText("\u200F+ اكتب مهمة جديدة ثم اضغط Enter...")
+        self.setPlaceholderText("+ اكتب مهمة جديدة ثم اضغط Enter...")
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.setAccessibleName("حقل إدخال مهمة جديدة")

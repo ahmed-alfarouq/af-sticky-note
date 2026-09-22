@@ -90,6 +90,7 @@ def bootstrap_application(app: QApplication) -> MainWindow:
         quote_text = "لا توجد حكمة متاحة لهذا اليوم"
 
     # 3. Load today's initial tasks
+    assert day.id is not None, "Day id is always populated after database retrieval/creation"
     initial_tasks = task_service.get_today_tasks(day.id)
 
     # 4. Create MainWindow

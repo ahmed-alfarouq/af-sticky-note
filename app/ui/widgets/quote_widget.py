@@ -6,9 +6,11 @@ from typing import Optional
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
+from app.infrastructure.clock import format_dual_calendar_date
+
 
 class QuoteWidget(QFrame):
-    """Presents the current date and daily quote text with RTL alignment."""
+    """Presents the centered dual date (Gregorian & Hijri) and centered daily quote."""
 
     def __init__(
         self,
@@ -19,23 +21,28 @@ class QuoteWidget(QFrame):
         super().__init__(parent)
         self.setObjectName("quoteCard")
         self.setAccessibleName("بطاقة الحكمة اليومية")
-        self.setAccessibleDescription("تحتوي على تاريخ اليوم والحكمة المختارة")
+        self.setAccessibleDescription("تحتوي على تاريخ اليوم الميلادي والهجري والحكمة المختارة")
         self._init_ui(date_text, quote_text or "لا توجد حكمة متاحة لهذا اليوم")
 
     def _init_ui(self, date_text: str, quote_text: str) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(14, 12, 14, 14)
+        layout.setSpacing(10)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self._date_label = QLabel(date_text, self)
+        # Dual Gregorian + Hijri date formatted in Arabic
+        formatted_date = format_dual_calendar_date(date_text)
+
+        self._date_label = QLabel(formatted_date, self)
         self._date_label.setObjectName("dateLabel")
-        self._date_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._date_label.setAccessibleName("تاريخ اليوم")
+        self._date_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._date_label.setWordWrap(True)
+        self._date_label.setAccessibleName("التاريخ الميلادي والهجري لليوم")
 
         self._quote_label = QLabel(f"« {quote_text} »", self)
         self._quote_label.setObjectName("quoteTextLabel")
         self._quote_label.setWordWrap(True)
-        self._quote_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._quote_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._quote_label.setAccessibleName("نص الحكمة اليومية")
 
         layout.addWidget(self._date_label)

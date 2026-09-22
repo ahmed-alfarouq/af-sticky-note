@@ -84,9 +84,8 @@ def get_application_stylesheet() -> str:
     QFrame#quoteCard {{
         background-color: {COLOR_CARD_SURFACE};
         border: 1px solid {COLOR_CARD_BORDER};
-        border-right: 3px solid {COLOR_TRUST};
         border-radius: 8px;
-        padding: 10px 12px;
+        padding: 10px 14px;
     }}
 
     QLabel#quoteTextLabel {{

@@ -53,6 +53,7 @@ class MainWindow(QMainWindow):
 
         self._central_widget = QWidget(self)
         self._central_widget.setObjectName("centralWidget")
+        self._central_widget.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setCentralWidget(self._central_widget)
 
         self._init_layout(day.date, quote_text, initial_tasks)
@@ -72,6 +73,7 @@ class MainWindow(QMainWindow):
         # Sticky Note paper surface
         self._paper_frame = QFrame(self._central_widget)
         self._paper_frame.setObjectName("stickyNoteFrame")
+        self._paper_frame.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self._paper_frame.setAccessibleName("لوحة الملاحظة الورقية")
         outer_layout.addWidget(self._paper_frame)
 

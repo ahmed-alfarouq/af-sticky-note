@@ -27,11 +27,13 @@ class TaskItem(QFrame):
         layout.setSpacing(12)
 
         self._checkbox = QCheckBox(self)
+        self._checkbox.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self._checkbox.setChecked(task.is_completed)
         self._checkbox.setAccessibleName(f"تحديد إنجاز المهمة: {task.text}")
         self._checkbox.toggled.connect(self._on_toggled)
 
         self._text_label = QLabel(task.text, self)
+        self._text_label.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self._text_label.setWordWrap(True)
         self._text_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._update_label_style(task.is_completed)
@@ -40,8 +42,9 @@ class TaskItem(QFrame):
         status_text = "مكتملة" if task.is_completed else "غير مكتملة"
         self.setAccessibleDescription(f"الحالة: {status_text}")
 
-        layout.addWidget(self._text_label, 1)
+        # Checkbox first on the right in RTL, followed by text next to it
         layout.addWidget(self._checkbox)
+        layout.addWidget(self._text_label, 1)
 
     def _on_toggled(self, checked: bool) -> None:
         self._update_label_style(checked)

@@ -18,13 +18,16 @@ class TaskList(QScrollArea):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        if self.viewport() is not None:
+            self.viewport().setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setObjectName("taskListScroll")
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setAccessibleName("قائمة مهام اليوم")
         self.setAccessibleDescription("عرض المهام اليومية مع إمكانية تحديد إنجازها")
 
-        self._container = QWidget()
+        self._container = QWidget(self)
+        self._container.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self._container.setObjectName("taskListContainer")
         self._layout = QVBoxLayout(self._container)
         self._layout.setContentsMargins(0, 4, 0, 4)

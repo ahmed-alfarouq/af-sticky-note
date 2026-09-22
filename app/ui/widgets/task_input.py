@@ -14,9 +14,10 @@ class TaskInput(QLineEdit):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setObjectName("taskInputField")
         self.setPlaceholderText("+ اكتب مهمة جديدة ثم اضغط Enter...")
-        self.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.setAccessibleName("حقل إدخال مهمة جديدة")
         self.setAccessibleDescription("اكتب نص المهمة واضغط زر الإدخال لإضافتها")
         self.returnPressed.connect(self._on_return_pressed)

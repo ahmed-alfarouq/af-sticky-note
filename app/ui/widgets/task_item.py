@@ -16,6 +16,7 @@ class TaskItem(QFrame):
 
     def __init__(self, task: Task, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.task_id = task.id
         self.setObjectName("taskItemFrame")
         self._init_ui(task)

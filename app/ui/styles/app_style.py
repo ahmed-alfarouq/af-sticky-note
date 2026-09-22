@@ -49,6 +49,10 @@ def get_application_stylesheet() -> str:
         color: {COLOR_TEXT_PRIMARY};
     }}
 
+    QLabel {{
+        qproperty-alignment: 'AlignRight | AlignVCenter';
+    }}
+
     /* Main Window background acts as the desktop/board */
     QMainWindow {{
         background-color: {COLOR_BACKGROUND};
@@ -74,6 +78,7 @@ def get_application_stylesheet() -> str:
 
     /* Header / Date - Bright, high-contrast, perfectly visible */
     QLabel#dateLabel {{
+        qproperty-alignment: 'AlignCenter';
         color: #7EB2E6;
         font-size: 13px;
         font-weight: 600;
@@ -90,6 +95,7 @@ def get_application_stylesheet() -> str:
     }}
 
     QLabel#quoteTextLabel {{
+        qproperty-alignment: 'AlignCenter';
         color: {COLOR_TEXT_PRIMARY};
         font-size: 14px;
         font-weight: 500;
@@ -162,6 +168,7 @@ def get_application_stylesheet() -> str:
 
     /* Task Input Field */
     QLineEdit#taskInputField {{
+        qproperty-alignment: 'AlignRight | AlignVCenter';
         background-color: {COLOR_INPUT_BG};
         color: {COLOR_TEXT_PRIMARY};
         border: 1.5px solid {COLOR_BORDER};

@@ -17,6 +17,7 @@ class TaskList(QScrollArea):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setObjectName("taskListScroll")
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)

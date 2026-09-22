@@ -45,6 +45,7 @@ class MainWindow(QMainWindow):
         self._day = day
         self._task_service = task_service
 
+        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setWindowTitle(APP_NAME)
         self.resize(380, 560)
         self.setMinimumSize(320, 420)

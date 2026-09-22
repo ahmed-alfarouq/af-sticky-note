@@ -20,7 +20,7 @@ def _build_window() -> QMainWindow:
     window.resize(320, 200)
 
     label = QLabel("دايلي ستيكي — تشغيل تجريبي للمرحلة الأولى")
-    label.setAlignment(Qt.AlignCenter)
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     label.setWordWrap(True)
     window.setCentralWidget(label)
     return window
@@ -30,7 +30,7 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(ORG_NAME)
-    app.setLayoutDirection(Qt.RightToLeft)
+    app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
 
     window = _build_window()
     window.show()

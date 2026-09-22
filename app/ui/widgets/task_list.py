@@ -17,9 +17,6 @@ class TaskList(QScrollArea):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-        if self.viewport() is not None:
-            self.viewport().setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setObjectName("taskListScroll")
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
@@ -27,7 +24,6 @@ class TaskList(QScrollArea):
         self.setAccessibleDescription("عرض المهام اليومية مع إمكانية تحديد إنجازها")
 
         self._container = QWidget(self)
-        self._container.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self._container.setObjectName("taskListContainer")
         self._layout = QVBoxLayout(self._container)
         self._layout.setContentsMargins(0, 4, 0, 4)
@@ -45,6 +41,9 @@ class TaskList(QScrollArea):
 
     def add_task(self, task: Task) -> None:
         """Append a new TaskItem to the visual list."""
+        if task.id is None:
+            raise ValueError("Cannot add a task without an ID")
+
         if task.id in self._items:
             return
 

@@ -19,7 +19,6 @@ class QuoteWidget(QFrame):
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
-        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setObjectName("quoteCard")
         self.setAccessibleName("بطاقة الحكمة اليومية")
         self.setAccessibleDescription("تحتوي على تاريخ اليوم الميلادي والهجري والحكمة المختارة")

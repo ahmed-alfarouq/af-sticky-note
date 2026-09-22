@@ -23,7 +23,6 @@ class TaskItem(QFrame):
 
     def __init__(self, task: Task, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.task_id = task.id
         self.setObjectName("taskItemFrame")
         self._init_ui(task)
@@ -34,16 +33,13 @@ class TaskItem(QFrame):
         layout.setSpacing(12)
 
         self._checkbox = QCheckBox(self)
-        self._checkbox.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self._checkbox.setChecked(task.is_completed)
         self._checkbox.setAccessibleName(f"تحديد إنجاز المهمة: {task.text}")
         self._checkbox.toggled.connect(self._on_toggled)
 
         self._text_label = QLabel(task.text, self)
-        self._text_label.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self._text_label.setWordWrap(True)
         self._text_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self._text_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._update_label_style(task.is_completed)
 
         self.setAccessibleName(f"مهمة: {task.text}")

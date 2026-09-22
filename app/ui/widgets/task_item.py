@@ -40,8 +40,8 @@ class TaskItem(QFrame):
         status_text = "مكتملة" if task.is_completed else "غير مكتملة"
         self.setAccessibleDescription(f"الحالة: {status_text}")
 
-        layout.addWidget(self._checkbox)
         layout.addWidget(self._text_label, 1)
+        layout.addWidget(self._checkbox)
 
     def _on_toggled(self, checked: bool) -> None:
         self._update_label_style(checked)

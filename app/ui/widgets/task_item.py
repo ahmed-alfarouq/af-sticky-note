@@ -4,7 +4,14 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QWidget
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QSizePolicy,
+    QWidget,
+)
 
 from app.core.models import Task
 
@@ -35,6 +42,7 @@ class TaskItem(QFrame):
         self._text_label = QLabel(task.text, self)
         self._text_label.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self._text_label.setWordWrap(True)
+        self._text_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._text_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._update_label_style(task.is_completed)
 

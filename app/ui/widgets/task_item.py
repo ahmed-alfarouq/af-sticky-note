@@ -1,0 +1,64 @@
+"""Visual representation and interaction for an individual task item."""
+from __future__ import annotations
+
+from typing import Optional
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QWidget
+
+from app.core.models import Task
+
+
+class TaskItem(QFrame):
+    """A single task row containing a checkbox and task text label."""
+
+    completed_toggled = Signal(int, bool)  # task_id, is_completed
+
+    def __init__(self, task: Task, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.task_id = task.id
+        self.setObjectName("taskItemFrame")
+        self._init_ui(task)
+
+    def _init_ui(self, task: Task) -> None:
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(12)
+
+        self._checkbox = QCheckBox(self)
+        self._checkbox.setChecked(task.is_completed)
+        self._checkbox.setAccessibleName(f"تحديد إنجاز المهمة: {task.text}")
+        self._checkbox.toggled.connect(self._on_toggled)
+
+        self._text_label = QLabel(task.text, self)
+        self._text_label.setWordWrap(True)
+        self._text_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._update_label_style(task.is_completed)
+
+        self.setAccessibleName(f"مهمة: {task.text}")
+        status_text = "مكتملة" if task.is_completed else "غير مكتملة"
+        self.setAccessibleDescription(f"الحالة: {status_text}")
+
+        layout.addWidget(self._checkbox)
+        layout.addWidget(self._text_label, 1)
+
+    def _on_toggled(self, checked: bool) -> None:
+        self._update_label_style(checked)
+        status_text = "مكتملة" if checked else "غير مكتملة"
+        self.setAccessibleDescription(f"الحالة: {status_text}")
+        self.completed_toggled.emit(self.task_id, checked)
+
+    def _update_label_style(self, is_completed: bool) -> None:
+        if is_completed:
+            self._text_label.setObjectName("taskTextLabelCompleted")
+        else:
+            self._text_label.setObjectName("taskTextLabel")
+        self._text_label.style().unpolish(self._text_label)
+        self._text_label.style().polish(self._text_label)
+
+    def set_completed_silently(self, is_completed: bool) -> None:
+        """Update checkbox state without re-emitting toggled signal."""
+        self._checkbox.blockSignals(True)
+        self._checkbox.setChecked(is_completed)
+        self._update_label_style(is_completed)
+        self._checkbox.blockSignals(False)

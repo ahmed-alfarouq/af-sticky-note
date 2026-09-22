@@ -28,3 +28,15 @@ def get_database_path() -> Path:
     data_dir = get_app_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir / "daily_sticky.db"
+
+
+def get_quotes_path() -> Path:
+    """Return the path to the bundled data/quotes.txt seed file."""
+    project_root = Path(__file__).resolve().parent.parent.parent
+    return project_root / "data" / "quotes.txt"
+
+
+def get_fonts_dir() -> Path:
+    """Return the path to the bundled fonts directory."""
+    project_root = Path(__file__).resolve().parent.parent.parent
+    return project_root / "fonts" / "thmanyah"

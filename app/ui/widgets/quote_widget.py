@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from app.infrastructure.clock import format_dual_calendar_date
 
@@ -26,8 +26,8 @@ class QuoteWidget(QFrame):
 
     def _init_ui(self, date_text: str, quote_text: str) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 14)
-        layout.setSpacing(10)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(6)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Dual Gregorian + Hijri date formatted in Arabic
@@ -37,12 +37,14 @@ class QuoteWidget(QFrame):
         self._date_label.setObjectName("dateLabel")
         self._date_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._date_label.setWordWrap(True)
+        self._date_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._date_label.setAccessibleName("التاريخ الميلادي والهجري لليوم")
 
         self._quote_label = QLabel(f"« {quote_text} »", self)
         self._quote_label.setObjectName("quoteTextLabel")
         self._quote_label.setWordWrap(True)
         self._quote_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._quote_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._quote_label.setAccessibleName("نص الحكمة اليومية")
 
         layout.addWidget(self._date_label)

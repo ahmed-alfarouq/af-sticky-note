@@ -72,12 +72,14 @@ def get_application_stylesheet() -> str:
         max-height: 16px;
     }}
 
-    /* Header / Date */
+    /* Header / Date - Bright, high-contrast, perfectly visible */
     QLabel#dateLabel {{
-        color: {COLOR_SOFT};
+        color: #7EB2E6;
         font-size: 13px;
         font-weight: 600;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.3px;
+        line-height: 1.4;
+        background: transparent;
     }}
 
     /* Daily Quote Card */
@@ -85,14 +87,15 @@ def get_application_stylesheet() -> str:
         background-color: {COLOR_CARD_SURFACE};
         border: 1px solid {COLOR_CARD_BORDER};
         border-radius: 8px;
-        padding: 10px 14px;
     }}
 
     QLabel#quoteTextLabel {{
         color: {COLOR_TEXT_PRIMARY};
         font-size: 14px;
+        font-weight: 500;
         line-height: 1.5;
         font-style: italic;
+        background: transparent;
     }}
 
     /* Task List Scroll Area */

@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from app.core.models import Task
+from app.core.models import Task, TaskPriority
 from app.database.task_repository import TaskRepository
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,12 @@ class TaskService:
         """Fetch all tasks for the given day, ordered by position ascending."""
         return self._task_repo.list_for_day(day_id)
 
-    def create_task(self, day_id: int, text: str) -> Optional[Task]:
+    def create_task(
+        self,
+        day_id: int,
+        text: str,
+        priority: TaskPriority = TaskPriority.MEDIUM,
+    ) -> Optional[Task]:
         """Validate non-empty text, strip whitespace, and persist.
 
         Returns the created Task on success.
@@ -36,11 +41,28 @@ class TaskService:
         cleaned = text.strip()
         if not cleaned:
             return None
-        return self._task_repo.create(day_id=day_id, text=cleaned)
+
+        # Validate priority enum if passed as string or enum
+        if not isinstance(priority, TaskPriority):
+            try:
+                priority = TaskPriority(priority)
+            except (ValueError, TypeError):
+                raise ValueError(f"Invalid task priority: {priority}")
+
+        return self._task_repo.create(day_id=day_id, text=cleaned, priority=priority)
 
     def toggle_task_completion(self, task_id: int, is_completed: bool) -> None:
         """Update the completion status of a task."""
         self._task_repo.set_completed(task_id=task_id, is_completed=is_completed)
+
+    def update_task_priority(self, task_id: int, priority: TaskPriority) -> None:
+        """Update the priority of a task."""
+        if not isinstance(priority, TaskPriority):
+            try:
+                priority = TaskPriority(priority)
+            except (ValueError, TypeError):
+                raise ValueError(f"Invalid task priority: {priority}")
+        self._task_repo.update_priority(task_id=task_id, priority=priority)
 
     def delete_task(self, task_id: int) -> None:
         """Remove a task by ID."""

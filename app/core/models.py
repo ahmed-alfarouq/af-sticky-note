@@ -22,6 +22,7 @@ class Task:
     created_at: str
     updated_at: str
     priority: TaskPriority = TaskPriority.MEDIUM
+    source_task_id: Optional[int] = None
 
 
 @dataclass(frozen=True)

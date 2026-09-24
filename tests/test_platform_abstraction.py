@@ -64,10 +64,10 @@ def test_platform_factory_resolution_and_singleton():
     assert adapter_darwin.name == "darwin"
     assert not adapter_darwin.is_supported
 
-    # Force win32 before Phase 5F (returns fallback adapter without crashing)
+    # Force win32 (returns WindowsPlatformAdapter in Phase 5F)
     adapter_win = get_platform_adapter(force_platform="win32")
-    assert "win32" in adapter_win.name
-    assert not adapter_win.is_supported
+    assert adapter_win.name == "windows"
+    assert adapter_win.is_supported is True
 
     reset_platform_adapter()
 

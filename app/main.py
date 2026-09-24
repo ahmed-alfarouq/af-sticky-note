@@ -104,9 +104,19 @@ def bootstrap_application(app: QApplication) -> MainWindow:
         initial_tasks=initial_tasks,
     )
 
-    # 5. Resolve platform adapter at composition root
+    # 5. Resolve platform adapter and attach to desktop layer if supported
     platform_adapter = get_platform_adapter()
     logger.info("Platform adapter resolved: %s (supported=%s)", platform_adapter.name, platform_adapter.is_supported)
+
+    # Note: Window must be shown / realized so PySide6 allocates a valid native HWND (winId)
+    window.show()
+    if platform_adapter.is_supported:
+        try:
+            hwnd = int(window.winId())
+            attached = platform_adapter.window_controller.attach_to_desktop(hwnd)
+            logger.info("Desktop window attachment result for HWND %s: %s", hwnd, attached)
+        except Exception as exc:
+            logger.warning("Failed to attach to desktop layer: %s", exc)
 
     # 6. Wire runtime daily lifecycle coordinator (midnight rollover timer & resume listener)
     rollover_service = DailyRolloverService(conn=conn, day_repo=day_repo, task_repo=task_repo)

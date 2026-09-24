@@ -45,6 +45,15 @@ class MainWindow(QMainWindow):
         self._day = day
         self._task_service = task_service
 
+        # Configure desktop widget window flags:
+        # - Qt.FramelessWindowHint: remove OS title bar and borders for sticky note look
+        # - Qt.SubWindow: prevent normal independent top-level taskbar grouping
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.SubWindow
+        )
+        # Translucent background allows rounded CSS paper corners without artifacts
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
         self.setWindowTitle(APP_NAME)
         self.resize(380, 560)
         self.setMinimumSize(320, 420)

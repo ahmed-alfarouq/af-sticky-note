@@ -36,6 +36,7 @@ from app.database.task_repository import TaskRepository
 from app.infrastructure.clock import local_today_iso
 from app.infrastructure.fonts import load_application_fonts
 from app.infrastructure.paths import get_database_path, get_fonts_dir, get_quotes_path
+from app.platform import get_platform_adapter
 from app.ui.windows.main_window import MainWindow
 
 logger = logging.getLogger(__name__)
@@ -103,7 +104,11 @@ def bootstrap_application(app: QApplication) -> MainWindow:
         initial_tasks=initial_tasks,
     )
 
-    # 5. Wire runtime daily lifecycle coordinator (midnight rollover timer & resume listener)
+    # 5. Resolve platform adapter at composition root
+    platform_adapter = get_platform_adapter()
+    logger.info("Platform adapter resolved: %s (supported=%s)", platform_adapter.name, platform_adapter.is_supported)
+
+    # 6. Wire runtime daily lifecycle coordinator (midnight rollover timer & resume listener)
     rollover_service = DailyRolloverService(conn=conn, day_repo=day_repo, task_repo=task_repo)
     coordinator = DailyLifecycleCoordinator(
         current_date=today_str,

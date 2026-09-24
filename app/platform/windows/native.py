@@ -22,9 +22,11 @@ GWLP_HWNDPARENT = -8
 # SetWindowPos Flags
 SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
-SWP_NOACTIVATE = 0x0010
-SWP_SHOWWINDOW = 0x0040
 SWP_NOZORDER = 0x0004
+SWP_NOREDRAW = 0x0008
+SWP_NOACTIVATE = 0x0010
+SWP_FRAMECHANGED = 0x0020
+SWP_SHOWWINDOW = 0x0040
 HWND_BOTTOM = 1
 
 # Window Messages
@@ -121,7 +123,7 @@ def find_desktop_workerw() -> int:
 
 
 def set_window_ex_style(hwnd: int, add_flags: int, remove_flags: int = 0) -> int:
-    """Update extended window styles using SetWindowLongPtrW."""
+    """Update extended window styles using SetWindowLongPtrW and flush frame changes."""
     user32 = _get_user32()
     if not user32 or not hwnd:
         return 0
@@ -136,6 +138,16 @@ def set_window_ex_style(hwnd: int, add_flags: int, remove_flags: int = 0) -> int
     new_style = (current_style | add_flags) & ~remove_flags
     if new_style != current_style:
         set_long(hwnd, GWL_EXSTYLE, new_style)
+        # Notify Windows Shell and DWM that extended styles changed so shell categorization updates
+        user32.SetWindowPos(
+            hwnd,
+            0,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        )
     return new_style
 
 

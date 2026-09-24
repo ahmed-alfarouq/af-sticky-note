@@ -117,12 +117,12 @@ def test_real_windows_desktop_attachment():
     import ctypes
     from PySide6.QtWidgets import QApplication
     from app.core.models import Day
-    from app.ui.windows.main_window import MainWindow
+    from app.infrastructure.clock import utc_now_iso
 
-    app = QApplication.instance() or QApplication([])
-    dummy_day = Day(id=1, date="2026-09-24", quote_id=1, quote_text="Test")
+    now = utc_now_iso()
+    dummy_day = Day(id=1, date="2026-09-24", quote_text="Test", created_at=now, updated_at=now)
 
-    # In real Windows test, verify HWND allocation
     adapter = WindowsPlatformAdapter()
     assert adapter.is_supported is True
-    # The remainder runs live against user32.dll on Windows
+    assert adapter.window_controller is not None
+    assert isinstance(adapter.window_controller, DesktopWindowController)

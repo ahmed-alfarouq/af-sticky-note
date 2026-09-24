@@ -1,7 +1,16 @@
-"""Standalone Windows diagnostic for Daily Sticky Win+D behavior.
+"""Complete top-level Z-order inspection across Win+D stages.
 
-Captures Win32 window metrics, Z-order neighbors, class names,
-and Qt window states across initial launch, after Win+D, and after restore.
+Walks the full top-level Z-order chain from top to bottom using
+GetTopWindow(NULL) -> GetWindow(hwnd, GW_HWNDNEXT).
+
+For each top-level window, captures:
+- HWND
+- Process ID & Name
+- Window Title & Class Name
+- Visibility, Minimized (IsIconic)
+- Window Rect
+- Extended Styles (WS_EX_TOPMOST, WS_EX_TOOLWINDOW, WS_EX_APPWINDOW)
+- Identifies Shell/Desktop Windows: Progman, WorkerW, SHELLDLL_DefView
 """
 from __future__ import annotations
 
@@ -10,7 +19,7 @@ from ctypes import wintypes
 from pathlib import Path
 import sys
 
-# Ensure repository root is on sys.path regardless of how the script is invoked
+# Ensure repository root is on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -20,14 +29,11 @@ from PySide6.QtWidgets import QApplication
 
 from app.main import bootstrap_application
 
-# Win32 definitions
 user32 = getattr(ctypes.windll, "user32", None)
 
 GWL_STYLE = -16
 GWL_EXSTYLE = -20
 GW_HWNDNEXT = 2
-GW_HWNDPREV = 3
-GW_OWNER = 4
 
 
 def _get_window_text(hwnd: int) -> str:
@@ -54,94 +60,149 @@ def _get_window_rect(hwnd: int) -> str:
         return "N/A"
     rect = wintypes.RECT()
     user32.GetWindowRect(hwnd, ctypes.byref(rect))
-    return f"({rect.left}, {rect.top}, {rect.right}, {rect.bottom}) [w={rect.right-rect.left}, h={rect.bottom-rect.top}]"
+    return f"({rect.left},{rect.top})-({rect.right},{rect.bottom}) [{rect.right-rect.left}x{rect.bottom-rect.top}]"
 
 
-def _describe_hwnd(hwnd: int) -> str:
+def _get_process_id(hwnd: int) -> int:
     if not user32 or not hwnd:
-        return "None"
-    title = _get_window_text(hwnd)
-    cls = _get_class_name(hwnd)
-    visible = bool(user32.IsWindowVisible(hwnd))
-    rect = _get_window_rect(hwnd)
-    return f"HWND=0x{hwnd:X} ({hwnd}) | Class='{cls}' | Title='{title}' | Visible={visible} | Rect={rect}"
+        return 0
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return pid.value
 
 
-def inspect_state(label: str, window, hwnd: int) -> None:
-    print(f"\n{'='*25} {label} {'='*25}")
-
-    # 1. Qt State
-    print("\n--- [Qt State] ---")
-    print(f"window.winId():      {int(window.winId())}")
-    print(f"window.isVisible():  {window.isVisible()}")
-    print(f"window.isHidden():   {window.isHidden()}")
-    print(f"window.isMinimized():{window.isMinimized()}")
-    print(f"window.windowState():{window.windowState()}")
-    print(f"window.windowFlags():{window.windowFlags()}")
-
+def walk_full_z_order(target_hwnd: int) -> list[dict]:
+    """Walk the complete top-level Z-order chain from front-most to back-most."""
     if not user32:
-        print("\n[Win32]: user32 not available on this platform.")
-        print(f"{'='*60}\n")
-        return
+        return []
 
-    # 2. Win32 Direct State
-    print("\n--- [Win32 Direct State] ---")
+    results = []
+    # Get top-level window at top of Z-order
+    curr = user32.GetTopWindow(0)
+    index = 0
+
     get_long = getattr(user32, "GetWindowLongPtrW", getattr(user32, "GetWindowLongW", None))
-    style = get_long(hwnd, GWL_STYLE) if get_long else 0
-    exstyle = get_long(hwnd, GWL_EXSTYLE) if get_long else 0
 
-    print(f"HWND:                0x{hwnd:X} ({hwnd})")
-    print(f"IsWindow:            {bool(user32.IsWindow(hwnd))}")
-    print(f"IsWindowVisible:     {bool(user32.IsWindowVisible(hwnd))}")
-    print(f"IsIconic(minimized): {bool(user32.IsIconic(hwnd))}")
-    print(f"GWL_STYLE:           0x{style:08X}")
-    print(f"GWL_EXSTYLE:         0x{exstyle:08X}")
-    print(f"  WS_EX_TOOLWINDOW:  {bool(exstyle & 0x00000080)}")
-    print(f"  WS_EX_APPWINDOW:   {bool(exstyle & 0x00040000)}")
-    print(f"  WS_EX_TOPMOST:     {bool(exstyle & 0x00000008)}")
-    print(f"Parent HWND:         0x{user32.GetParent(hwnd):X}")
-    print(f"Owner HWND:          0x{user32.GetWindow(hwnd, GW_OWNER):X}")
-    print(f"WindowRect:          {_get_window_rect(hwnd)}")
+    while curr:
+        is_visible = bool(user32.IsWindowVisible(curr))
+        is_iconic = bool(user32.IsIconic(curr))
+        title = _get_window_text(curr)
+        cls = _get_class_name(curr)
+        rect_str = _get_window_rect(curr)
+        pid = _get_process_id(curr)
 
-    fg_hwnd = user32.GetForegroundWindow()
-    print(f"Foreground HWND:     {_describe_hwnd(fg_hwnd)}")
+        style = get_long(curr, GWL_STYLE) if get_long else 0
+        exstyle = get_long(curr, GWL_EXSTYLE) if get_long else 0
 
-    # 3. Z-Order Inspection (Above and Below in Top-Level Stack)
-    print("\n--- [Z-Order Neighborhood] ---")
-    hwnd_prev = user32.GetWindow(hwnd, GW_HWNDPREV)  # Window immediately above in Z-order
-    hwnd_next = user32.GetWindow(hwnd, GW_HWNDNEXT)  # Window immediately below in Z-order
+        is_topmost = bool(exstyle & 0x00000008)
+        is_tool = bool(exstyle & 0x00000080)
+        is_app = bool(exstyle & 0x00040000)
 
-    print(f"Window ABOVE (HWNDPREV): {_describe_hwnd(hwnd_prev)}")
-    print(f"TARGET WINDOW (DailySticky): {_describe_hwnd(hwnd)}")
-    print(f"Window BELOW (HWNDNEXT): {_describe_hwnd(hwnd_next)}")
+        # Highlight important window identities
+        is_target = (curr == target_hwnd)
+        is_progman = (cls == "Progman")
+        is_workerw = (cls == "WorkerW")
+        has_defview = bool(user32.FindWindowExW(curr, 0, "SHELLDLL_DefView", None))
 
-    print(f"{'='*60}\n")
+        # Filter out 0x0 zero-size or non-existent invisible helper message windows to keep output readable,
+        # but keep all windows that could participate in visual stacking or shell structure.
+        if is_visible or is_target or is_progman or is_workerw or has_defview:
+            results.append({
+                "z_index": index,
+                "hwnd": curr,
+                "is_target": is_target,
+                "class": cls,
+                "title": title,
+                "pid": pid,
+                "visible": is_visible,
+                "iconic": is_iconic,
+                "rect": rect_str,
+                "topmost": is_topmost,
+                "tool": is_tool,
+                "app": is_app,
+                "is_progman": is_progman,
+                "is_workerw": is_workerw,
+                "has_defview": has_defview,
+            })
+            index += 1
+
+        curr = user32.GetWindow(curr, GW_HWNDNEXT)
+
+    return results
+
+
+def print_stage_z_order(label: str, window, target_hwnd: int) -> None:
+    print(f"\n{'='*30} {label} {'='*30}")
+
+    fg_hwnd = user32.GetForegroundWindow() if user32 else 0
+    fg_title = _get_window_text(fg_hwnd)
+    fg_cls = _get_class_name(fg_hwnd)
+    print(f"Foreground Window: 0x{fg_hwnd:X} | Class='{fg_cls}' | Title='{fg_title}'")
+    print(f"DailySticky Window: 0x{target_hwnd:X} | Qt isVisible={window.isVisible()}, isMinimized={window.isMinimized()}\n")
+
+    print(f"{'Z':<4} {'HWND':<10} {'FLAG':<14} {'CLASS':<18} {'VIS':<5} {'MIN':<5} {'TM':<4} {'TL':<4} {'RECT':<28} {'TITLE'}")
+    print("-" * 115)
+
+    entries = walk_full_z_order(target_hwnd)
+    target_pos = None
+
+    for item in entries:
+        flag = ""
+        if item["is_target"]:
+            flag = "[TARGET]"
+            target_pos = item["z_index"]
+        elif item["is_progman"]:
+            flag = "[PROGMAN]"
+        elif item["has_defview"]:
+            flag = "[DEFVIEW/ICONS]"
+        elif item["is_workerw"]:
+            flag = "[WORKERW]"
+
+        h_str = f"0x{item['hwnd']:X}"
+        v_str = "YES" if item["visible"] else "no"
+        m_str = "YES" if item["iconic"] else "no"
+        tm_str = "Y" if item["topmost"] else "-"
+        tl_str = "Y" if item["tool"] else "-"
+
+        # Truncate title if long
+        t_str = (item["title"][:28] + "..") if len(item["title"]) > 30 else item["title"]
+
+        row = (
+            f"{item['z_index']:<4} {h_str:<10} {flag:<14} {item['class'][:17]:<18} "
+            f"{v_str:<5} {m_str:<5} {tm_str:<4} {tl_str:<4} {item['rect']:<28} {t_str}"
+        )
+        if item["is_target"]:
+            print(f">>> {row}")
+        else:
+            print(f"    {row}")
+
+    print("-" * 115)
+    print(f"Total Participative Windows: {len(entries)} | Target Sticky Z-Index: {target_pos} (0 is front-most)")
+    print("=" * 80 + "\n")
 
 
 def main() -> None:
     app = QApplication.instance() or QApplication(sys.argv)
-
-    # Use the real production bootstrap composition root
     window = bootstrap_application(app)
     hwnd = int(window.winId())
 
-    print("\n[DIAGNOSTIC STARTED] Real Daily Sticky application bootstrapped.")
-    inspect_state("STAGE 1: INITIAL (Before Win+D)", window, hwnd)
+    print("\n[DIAGNOSTIC ENGINE ACTIVE] Bootstrap complete.")
+    print_stage_z_order("STAGE 1: BEFORE WIN+D", window, hwnd)
 
     print(">>> INSTRUCTIONS FOR STAGE 2:")
-    print(">>> 1. Switch to another app (e.g. Chrome, Notepad, or File Explorer).")
+    print(">>> 1. Switch to a normal app (e.g. Chrome, Notepad, File Explorer).")
     print(">>> 2. Press Win + D ONCE.")
-    print(">>> Recording STAGE 2 in 10 seconds...\n")
+    print(">>> Measuring full Z-order in 10 seconds...\n")
 
     def run_stage_2() -> None:
-        inspect_state("STAGE 2: AFTER WIN+D (First Press)", window, hwnd)
+        print_stage_z_order("STAGE 2: AFTER WIN+D (First Press)", window, hwnd)
         print(">>> INSTRUCTIONS FOR STAGE 3:")
         print(">>> Press Win + D AGAIN to restore normal desktop windows.")
-        print(">>> Recording STAGE 3 in 10 seconds...\n")
+        print(">>> Measuring full Z-order in 10 seconds...\n")
         QTimer.singleShot(10000, run_stage_3)
 
     def run_stage_3() -> None:
-        inspect_state("STAGE 3: AFTER RESTORE (Second Win+D)", window, hwnd)
+        print_stage_z_order("STAGE 3: AFTER RESTORE (Second Win+D)", window, hwnd)
         print("[DIAGNOSTIC COMPLETE] Exiting in 3 seconds...")
         QTimer.singleShot(3000, app.quit)
 

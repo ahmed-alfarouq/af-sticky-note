@@ -47,9 +47,9 @@ class MainWindow(QMainWindow):
 
         # Configure desktop widget window flags:
         # - Qt.FramelessWindowHint: remove OS title bar and borders for sticky note look
-        # - Qt.SubWindow: prevent normal independent top-level taskbar grouping
+        # - Qt.Tool: prevents appearing in the taskbar and Alt+Tab while remaining a top-level window
         self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.SubWindow
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
         )
         # Translucent background allows rounded CSS paper corners without artifacts
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)

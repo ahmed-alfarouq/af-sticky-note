@@ -57,6 +57,21 @@ def local_today_iso() -> str:
     return date.today().isoformat()
 
 
+def ms_until_next_local_midnight(current_dt: Optional[datetime] = None) -> int:
+    """Calculate the milliseconds remaining until the next local Gregorian midnight.
+
+    Adds a small 500ms safety buffer so the timer fires safely inside the new day.
+    """
+    from datetime import time, timedelta
+
+    now = current_dt if current_dt is not None else datetime.now()
+    tomorrow = now.date() + timedelta(days=1)
+    next_midnight = datetime.combine(tomorrow, time.min)
+    remaining_seconds = (next_midnight - now).total_seconds()
+    # Ensure non-negative and add 500ms buffer
+    return max(1000, int(remaining_seconds * 1000) + 500)
+
+
 def gregorian_to_hijri(year: int, month: int, day: int) -> Tuple[int, int, int]:
     """Convert a Gregorian calendar date (year, month, day) to Islamic Hijri (year, month, day).
 

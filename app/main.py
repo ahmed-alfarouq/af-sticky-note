@@ -21,6 +21,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from app.config.settings import APP_NAME, ORG_NAME
+from app.core.services.daily_lifecycle_coordinator import DailyLifecycleCoordinator
+from app.core.services.daily_rollover_service import DailyRolloverService
 from app.core.services.quote_import_service import QuoteImportService
 from app.core.services.quote_service import NoAvailableQuotesError, QuoteService
 from app.core.services.task_service import TaskService
@@ -100,6 +102,19 @@ def bootstrap_application(app: QApplication) -> MainWindow:
         task_service=task_service,
         initial_tasks=initial_tasks,
     )
+
+    # 5. Wire runtime daily lifecycle coordinator (midnight rollover timer & resume listener)
+    rollover_service = DailyRolloverService(conn=conn, day_repo=day_repo, task_repo=task_repo)
+    coordinator = DailyLifecycleCoordinator(
+        current_date=today_str,
+        rollover_service=rollover_service,
+        quote_service=quote_service,
+        day_repo=day_repo,
+        task_service=task_service,
+        main_window=window,
+        parent=window,
+    )
+    app.aboutToQuit.connect(coordinator.cleanup)
 
     # Hook database connection close to Qt application quit
     app.aboutToQuit.connect(conn.close)

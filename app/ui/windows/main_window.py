@@ -106,6 +106,17 @@ class MainWindow(QMainWindow):
         self._task_input.task_submitted.connect(self._on_task_submitted)
         paper_layout.addWidget(self._task_input)
 
+    def refresh_daily_view(
+        self,
+        day: Day,
+        quote_text: Optional[str],
+        tasks: Sequence[Task],
+    ) -> None:
+        """Update the displayed date, quote, and task list without recreating widgets."""
+        self._day = day
+        self._quote_widget.set_date_and_quote(day.date, quote_text)
+        self._task_list.set_tasks(tasks)
+
     def _on_task_submitted(self, raw_text: str) -> None:
         """Handle task submission from TaskInput.
 

@@ -52,3 +52,9 @@ class QuoteWidget(QFrame):
 
     def set_quote_text(self, text: str) -> None:
         self._quote_label.setText(f"« {text} »")
+
+    def set_date_and_quote(self, date_text: str, quote_text: Optional[str]) -> None:
+        """Update both the dual calendar date and quote text."""
+        formatted_date = format_dual_calendar_date(date_text)
+        self._date_label.setText(formatted_date)
+        self.set_quote_text(quote_text or "لا توجد حكمة متاحة لهذا اليوم")

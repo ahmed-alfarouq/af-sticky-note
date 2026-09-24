@@ -35,8 +35,8 @@ class WindowsDesktopWindowController(DesktopWindowController):
         1. Configure extended styles: add WS_EX_TOOLWINDOW to exclude from Alt+Tab,
            remove WS_EX_APPWINDOW to exclude from taskbar.
         2. Resolve desktop WorkerW shell window.
-        3. SetParent to the WorkerW host behind desktop icons.
-        4. Lower to HWND_BOTTOM within that shell layer.
+        3. If WorkerW is found, set parent to WorkerW to place behind desktop icons.
+           Otherwise, position at HWND_BOTTOM.
         """
         if not window_handle:
             logger.error("Cannot attach to desktop: invalid window handle (%r)", window_handle)
@@ -46,8 +46,6 @@ class WindowsDesktopWindowController(DesktopWindowController):
             self._target_hwnd = window_handle
 
             # 1. Update extended styles for Taskbar / Alt+Tab suppression
-            # Adding WS_EX_TOOLWINDOW hides from Alt+Tab.
-            # Removing WS_EX_APPWINDOW hides from the Taskbar.
             set_window_ex_style(
                 window_handle,
                 add_flags=WS_EX_TOOLWINDOW,
@@ -56,22 +54,17 @@ class WindowsDesktopWindowController(DesktopWindowController):
 
             # 2. Find desktop WorkerW window
             workerw = find_desktop_workerw()
-            if not workerw:
-                logger.warning("Could not find WorkerW or Progman window on Windows; falling back to HWND_BOTTOM")
-                set_window_bottom(window_handle)
-                self._attached = True
-                return True
+            if workerw:
+                self._desktop_workerw = workerw
+                set_window_parent(window_handle, workerw)
+                logger.info("Attached window %d to desktop shell WorkerW %d", window_handle, workerw)
+            else:
+                logger.warning("Could not find WorkerW or Progman window on Windows; positioning at HWND_BOTTOM")
 
-            self._desktop_workerw = workerw
-
-            # 3. Re-parent to WorkerW
-            set_window_parent(window_handle, workerw)
-
-            # 4. Position at the bottom of the WorkerW layer
+            # 3. Position at HWND_BOTTOM
             set_window_bottom(window_handle)
 
             self._attached = True
-            logger.info("Successfully attached window %d to desktop shell WorkerW %d", window_handle, workerw)
             return True
 
         except Exception as exc:

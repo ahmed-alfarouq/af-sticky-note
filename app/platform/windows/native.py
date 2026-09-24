@@ -153,7 +153,7 @@ def set_window_parent(child_hwnd: int, parent_hwnd: int) -> int:
 
 
 def set_window_bottom(hwnd: int) -> bool:
-    """Place window at the bottom of its Z-order layer (HWND_BOTTOM)."""
+    """Place window at the bottom of its Z-order layer (HWND_BOTTOM) without moving or resizing."""
     user32 = _get_user32()
     if not user32 or not hwnd:
         return False
@@ -161,10 +161,10 @@ def set_window_bottom(hwnd: int) -> bool:
         user32.SetWindowPos(
             hwnd,
             HWND_BOTTOM,
-            100,
-            100,
-            380,
-            560,
-            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
         )
     )

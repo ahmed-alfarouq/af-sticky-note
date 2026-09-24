@@ -22,21 +22,24 @@ logger = logging.getLogger(__name__)
 
 
 class WindowsDesktopWindowController(DesktopWindowController):
-    """Windows-specific desktop layer window controller."""
+    """Windows-specific desktop layer window controller.
+
+    Keeps MainWindow as a top-level HWND.
+    Configures extended window styles (WS_EX_TOOLWINDOW) and lowers to HWND_BOTTOM
+    without reparenting to Explorer or WorkerW.
+    """
 
     def __init__(self) -> None:
         self._attached: bool = False
         self._target_hwnd: Optional[int] = None
-        self._desktop_workerw: Optional[int] = None
 
     def attach_to_desktop(self, window_handle: int) -> bool:
-        """Attach window to the Windows desktop shell layer.
+        """Configure top-level desktop sticky note behavior.
 
-        1. Configure extended styles: add WS_EX_TOOLWINDOW to exclude from Alt+Tab,
-           remove WS_EX_APPWINDOW to exclude from taskbar.
-        2. Resolve desktop WorkerW shell window.
-        3. If WorkerW is found, set parent to WorkerW to place behind desktop icons.
-           Otherwise, position at HWND_BOTTOM.
+        1. Ensures the window remains a top-level HWND (no SetParent).
+        2. Configures extended window styles:
+           - Adds WS_EX_TOOLWINDOW to remove from Alt+Tab and taskbar.
+        3. Lowers to HWND_BOTTOM so normal applications naturally sit above it.
         """
         if not window_handle:
             logger.error("Cannot attach to desktop: invalid window handle (%r)", window_handle)
@@ -45,48 +48,42 @@ class WindowsDesktopWindowController(DesktopWindowController):
         try:
             self._target_hwnd = window_handle
 
-            # 1. Update extended styles for Taskbar / Alt+Tab suppression
+            # 1. Update extended styles for Taskbar / Alt+Tab suppression as top-level tool window
             set_window_ex_style(
                 window_handle,
                 add_flags=WS_EX_TOOLWINDOW,
                 remove_flags=WS_EX_APPWINDOW,
             )
 
-            # 2. Find desktop WorkerW window
-            workerw = find_desktop_workerw()
-            if workerw:
-                self._desktop_workerw = workerw
-                set_window_parent(window_handle, workerw)
-                logger.info("Attached window %d to desktop shell WorkerW %d", window_handle, workerw)
-            else:
-                logger.warning("Could not find WorkerW or Progman window on Windows; positioning at HWND_BOTTOM")
-
-            # 3. Position at HWND_BOTTOM
+            # 2. Lower to HWND_BOTTOM in top-level Z-order
             set_window_bottom(window_handle)
 
             self._attached = True
+            logger.info("Successfully configured top-level desktop window %d at HWND_BOTTOM", window_handle)
             return True
 
         except Exception as exc:
-            logger.error("Failed to attach window to Windows desktop: %s", exc, exc_info=True)
+            logger.error("Failed to configure top-level desktop window: %s", exc, exc_info=True)
             self._attached = False
             return False
 
     def detach_from_desktop(self, window_handle: int) -> bool:
-        """Detach window from desktop WorkerW back to standard desktop root."""
+        """Restore standard window styles if detached."""
         if not window_handle:
             return False
 
         try:
-            # Reparent back to 0 (top-level desktop)
-            set_window_parent(window_handle, 0)
+            set_window_ex_style(
+                window_handle,
+                add_flags=WS_EX_APPWINDOW,
+                remove_flags=WS_EX_TOOLWINDOW,
+            )
             self._attached = False
             self._target_hwnd = None
-            self._desktop_workerw = None
-            logger.info("Detached window %d from desktop shell", window_handle)
+            logger.info("Restored standard styles for window %d", window_handle)
             return True
         except Exception as exc:
-            logger.error("Failed to detach window from desktop: %s", exc)
+            logger.error("Failed to restore window styles: %s", exc)
             return False
 
     def is_attached(self) -> bool:

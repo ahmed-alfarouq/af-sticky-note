@@ -41,19 +41,11 @@ def test_windows_desktop_controller_safe_on_invalid_hwnd():
 
 
 def test_windows_desktop_controller_mocked_success(monkeypatch):
-    """Verify attach flow with mocked native helpers."""
+    """Verify attach flow with mocked native helpers (top-level, no SetParent)."""
     calls = []
 
     def mock_set_window_ex_style(hwnd, add_flags, remove_flags):
         calls.append(("ex_style", hwnd, add_flags, remove_flags))
-        return 1
-
-    def mock_find_desktop_workerw():
-        calls.append(("find_workerw",))
-        return 99999
-
-    def mock_set_window_parent(child_hwnd, parent_hwnd):
-        calls.append(("set_parent", child_hwnd, parent_hwnd))
         return 1
 
     def mock_set_window_bottom(hwnd):
@@ -63,8 +55,6 @@ def test_windows_desktop_controller_mocked_success(monkeypatch):
     from app.platform.windows import desktop_window
 
     monkeypatch.setattr(desktop_window, "set_window_ex_style", mock_set_window_ex_style)
-    monkeypatch.setattr(desktop_window, "find_desktop_workerw", mock_find_desktop_workerw)
-    monkeypatch.setattr(desktop_window, "set_window_parent", mock_set_window_parent)
     monkeypatch.setattr(desktop_window, "set_window_bottom", mock_set_window_bottom)
 
     controller = WindowsDesktopWindowController()
@@ -73,15 +63,13 @@ def test_windows_desktop_controller_mocked_success(monkeypatch):
     assert success is True
     assert controller.is_attached()
     assert ("ex_style", 12345, desktop_window.WS_EX_TOOLWINDOW, desktop_window.WS_EX_APPWINDOW) in calls
-    assert ("find_workerw",) in calls
-    assert ("set_parent", 12345, 99999) in calls
     assert ("set_bottom", 12345) in calls
 
     # Detach
     detach_success = controller.detach_from_desktop(12345)
     assert detach_success is True
     assert not controller.is_attached()
-    assert ("set_parent", 12345, 0) in calls
+    assert ("ex_style", 12345, desktop_window.WS_EX_APPWINDOW, desktop_window.WS_EX_TOOLWINDOW) in calls
 
 
 def test_main_window_has_no_win32_or_topmost_imports():

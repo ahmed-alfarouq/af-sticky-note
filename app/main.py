@@ -108,8 +108,12 @@ def bootstrap_application(app: QApplication) -> MainWindow:
     platform_adapter = get_platform_adapter()
     logger.info("Platform adapter resolved: %s (supported=%s)", platform_adapter.name, platform_adapter.is_supported)
 
-    # Note: Window must be shown / realized so PySide6 allocates a valid native HWND (winId)
+    # Position on screen and show
+    window.setGeometry(100, 100, 380, 560)
     window.show()
+    window.raise_()
+    window.activateWindow()
+
     if platform_adapter.is_supported:
         try:
             hwnd = int(window.winId())

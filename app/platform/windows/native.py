@@ -144,7 +144,12 @@ def set_window_parent(child_hwnd: int, parent_hwnd: int) -> int:
     user32 = _get_user32()
     if not user32 or not child_hwnd:
         return 0
-    return user32.SetParent(child_hwnd, parent_hwnd)
+    res = user32.SetParent(child_hwnd, parent_hwnd)
+    # When a top-level window becomes a child window in Win32, WS_CHILD must be added
+    # and the window must be made visible explicitly in its new parent coordinates
+    user32.ShowWindow(child_hwnd, 5)  # SW_SHOW = 5
+    user32.UpdateWindow(child_hwnd)
+    return res
 
 
 def set_window_bottom(hwnd: int) -> bool:
@@ -156,10 +161,10 @@ def set_window_bottom(hwnd: int) -> bool:
         user32.SetWindowPos(
             hwnd,
             HWND_BOTTOM,
-            0,
-            0,
-            0,
-            0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            100,
+            100,
+            380,
+            560,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW,
         )
     )

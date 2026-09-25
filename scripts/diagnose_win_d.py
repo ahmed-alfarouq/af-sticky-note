@@ -34,6 +34,8 @@ user32 = getattr(ctypes.windll, "user32", None)
 GWL_STYLE = -16
 GWL_EXSTYLE = -20
 GW_HWNDNEXT = 2
+GW_HWNDPREV = 3
+GW_OWNER = 4
 
 
 def _get_window_text(hwnd: int) -> str:

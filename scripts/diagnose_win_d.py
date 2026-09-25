@@ -71,15 +71,19 @@ def _get_process_id(hwnd: int) -> int:
     return pid.value
 
 
-def walk_full_z_order(target_hwnd: int) -> list[dict]:
-    """Walk the complete top-level Z-order chain from front-most to back-most."""
+def walk_full_z_order(target_hwnd: int) -> tuple[list[dict], dict]:
+    """Walk the complete top-level Z-order chain from front-most to back-most.
+
+    Every encountered HWND increments actual_z_index so that the Z index
+    reflects the true position in the complete Win32 top-level chain.
+    """
     if not user32:
-        return []
+        return [], {}
 
     results = []
-    # Get top-level window at top of Z-order
+    target_info = {}
     curr = user32.GetTopWindow(0)
-    index = 0
+    actual_z_index = 0
 
     get_long = getattr(user32, "GetWindowLongPtrW", getattr(user32, "GetWindowLongW", None))
 
@@ -98,37 +102,49 @@ def walk_full_z_order(target_hwnd: int) -> list[dict]:
         is_tool = bool(exstyle & 0x00000080)
         is_app = bool(exstyle & 0x00040000)
 
-        # Highlight important window identities
         is_target = (curr == target_hwnd)
         is_progman = (cls == "Progman")
         is_workerw = (cls == "WorkerW")
         has_defview = bool(user32.FindWindowExW(curr, 0, "SHELLDLL_DefView", None))
 
-        # Filter out 0x0 zero-size or non-existent invisible helper message windows to keep output readable,
-        # but keep all windows that could participate in visual stacking or shell structure.
-        if is_visible or is_target or is_progman or is_workerw or has_defview:
-            results.append({
-                "z_index": index,
-                "hwnd": curr,
-                "is_target": is_target,
-                "class": cls,
-                "title": title,
-                "pid": pid,
-                "visible": is_visible,
-                "iconic": is_iconic,
-                "rect": rect_str,
-                "topmost": is_topmost,
-                "tool": is_tool,
-                "app": is_app,
-                "is_progman": is_progman,
-                "is_workerw": is_workerw,
-                "has_defview": has_defview,
-            })
-            index += 1
+        # Categorize window type
+        is_shell = is_progman or is_workerw or has_defview or cls in (
+            "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "Windows.UI.Core.CoreWindow"
+        )
+        # Normal app window: visible, not shell, not tool window, has title or standard app class
+        is_normal_app = is_visible and not is_shell and not is_tool and not is_topmost and not is_target and bool(title.strip())
 
+        item = {
+            "z_index": actual_z_index,
+            "hwnd": curr,
+            "is_target": is_target,
+            "class": cls,
+            "title": title,
+            "pid": pid,
+            "visible": is_visible,
+            "iconic": is_iconic,
+            "rect": rect_str,
+            "topmost": is_topmost,
+            "tool": is_tool,
+            "app": is_app,
+            "is_progman": is_progman,
+            "is_workerw": is_workerw,
+            "has_defview": has_defview,
+            "is_shell": is_shell,
+            "is_normal_app": is_normal_app,
+        }
+
+        if is_target:
+            target_info = item
+
+        # Filter out 0x0 or blank invisible helper windows from printing, but keep all key windows
+        if is_visible or is_target or is_progman or is_workerw or has_defview or is_normal_app:
+            results.append(item)
+
+        actual_z_index += 1
         curr = user32.GetWindow(curr, GW_HWNDNEXT)
 
-    return results
+    return results, target_info
 
 
 def print_stage_z_order(label: str, window, target_hwnd: int) -> None:
@@ -143,20 +159,21 @@ def print_stage_z_order(label: str, window, target_hwnd: int) -> None:
     print(f"{'Z':<4} {'HWND':<10} {'FLAG':<14} {'CLASS':<18} {'VIS':<5} {'MIN':<5} {'TM':<4} {'TL':<4} {'RECT':<28} {'TITLE'}")
     print("-" * 115)
 
-    entries = walk_full_z_order(target_hwnd)
-    target_pos = None
+    entries, target_info = walk_full_z_order(target_hwnd)
+    target_pos = target_info.get("z_index", None)
 
     for item in entries:
         flag = ""
         if item["is_target"]:
             flag = "[TARGET]"
-            target_pos = item["z_index"]
         elif item["is_progman"]:
             flag = "[PROGMAN]"
         elif item["has_defview"]:
             flag = "[DEFVIEW/ICONS]"
         elif item["is_workerw"]:
             flag = "[WORKERW]"
+        elif item["is_normal_app"]:
+            flag = "[APP]"
 
         h_str = f"0x{item['hwnd']:X}"
         v_str = "YES" if item["visible"] else "no"
@@ -164,7 +181,6 @@ def print_stage_z_order(label: str, window, target_hwnd: int) -> None:
         tm_str = "Y" if item["topmost"] else "-"
         tl_str = "Y" if item["tool"] else "-"
 
-        # Truncate title if long
         t_str = (item["title"][:28] + "..") if len(item["title"]) > 30 else item["title"]
 
         row = (
@@ -177,12 +193,55 @@ def print_stage_z_order(label: str, window, target_hwnd: int) -> None:
             print(f"    {row}")
 
     print("-" * 115)
-    windows_above = target_pos if target_pos is not None else 0
-    windows_below = (len(entries) - 1 - target_pos) if target_pos is not None else 0
-    print(f"Total Participative Windows: {len(entries)}")
-    print(f"Daily Sticky Z-order position: {target_pos} (0 is front-most)")
-    print(f"Windows above Daily Sticky: {windows_above}")
-    print(f"Windows below Daily Sticky: {windows_below}")
+
+    # Formal HWND_BOTTOM Verification Analysis
+    normal_apps_above = [
+        it for it in entries if it["is_normal_app"] and target_pos is not None and it["z_index"] < target_pos
+    ]
+    normal_apps_below = [
+        it for it in entries if it["is_normal_app"] and target_pos is not None and it["z_index"] > target_pos
+    ]
+    shell_below = [
+        it for it in entries if it["is_shell"] and target_pos is not None and it["z_index"] > target_pos
+    ]
+
+    print("\n=== Z-ORDER VERIFICATION ===")
+    if target_info:
+        print(f"Daily Sticky:")
+        print(f"    True Z index:   {target_pos}")
+        print(f"    Topmost:        {'YES' if target_info.get('topmost') else 'NO'}")
+        print(f"    ToolWindow:     {'YES' if target_info.get('tool') else 'NO'}")
+        print(f"    AppWindow:      {'YES' if target_info.get('app') else 'NO'}")
+        print(f"    Visible:        {'YES' if target_info.get('visible') else 'NO'}")
+        print(f"    Minimized:      {'YES' if target_info.get('iconic') else 'NO'}")
+        print(f"    WindowRect:     {target_info.get('rect')}")
+
+        parent_hwnd = user32.GetParent(target_hwnd) if user32 else 0
+        owner_hwnd = user32.GetWindow(target_hwnd, GW_OWNER) if user32 else 0
+        print(f"    Parent HWND:    0x{parent_hwnd:X} (Expected: 0x0)")
+        print(f"    Owner HWND:     0x{owner_hwnd:X} (Expected: 0x0)")
+
+        has_apps_above = len(normal_apps_above) > 0
+        has_apps_below = len(normal_apps_below) > 0
+
+        print(f"\nNormal application windows above Sticky: {'YES (' + str(len(normal_apps_above)) + ' apps)' if has_apps_above else 'NO'}")
+        for app_it in normal_apps_above[:5]:
+            print(f"    - 0x{app_it['hwnd']:X} [{app_it['class']}]: {app_it['title']}")
+
+        print(f"Normal application windows below Sticky: {'YES (' + str(len(normal_apps_below)) + ' apps)' if has_apps_below else 'NO'}")
+        for app_it in normal_apps_below[:5]:
+            print(f"    - 0x{app_it['hwnd']:X} [{app_it['class']}]: {app_it['title']}")
+
+        # Shell windows below
+        if shell_below:
+            print(f"Shell windows below Sticky: {len(shell_below)} (e.g. {shell_below[0]['class']})")
+
+        bottom_pass = not has_apps_below
+        print(f"\nResult:")
+        print(f"    HWND_BOTTOM verification (no normal apps below): {'PASS' if bottom_pass else 'FAIL'}")
+    else:
+        print("Daily Sticky window not found in Z-order walk!")
+
     print("=" * 80 + "\n")
 
 

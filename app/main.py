@@ -108,6 +108,25 @@ def bootstrap_application(app: QApplication) -> MainWindow:
     platform_adapter = get_platform_adapter()
     logger.info("Platform adapter resolved: %s (supported=%s)", platform_adapter.name, platform_adapter.is_supported)
 
+    # Initialize system tray if on Windows adapter
+    from app.platform.windows.tray import WindowsSystemTrayController
+
+    def _on_app_exit_requested() -> None:
+        window._allow_window_close = True
+        app.quit()
+
+    if platform_adapter.name == "windows":
+        # Wire MainWindow into the tray controller
+        tray = WindowsSystemTrayController(
+            main_window=window,
+            on_exit_requested=_on_app_exit_requested,
+            parent=window,
+        )
+        # Update adapter tray controller reference
+        platform_adapter._tray_controller = tray
+        tray.show()
+        app.aboutToQuit.connect(tray.hide)
+
     # Show window using its restored/validated geometry
     window.show()
     window.raise_()

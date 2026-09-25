@@ -79,6 +79,9 @@ class MainWindow(QMainWindow):
         self._central_widget.setMouseTracking(True)
         self.setCentralWidget(self._central_widget)
 
+        # Flag to indicate whether window closing should hide to tray or do real shutdown
+        self._allow_window_close: bool = False
+
         self._init_layout(day.date, quote_text, initial_tasks)
         self.setStyleSheet(get_application_stylesheet())
 
@@ -312,3 +315,17 @@ class MainWindow(QMainWindow):
                 self._geometry_manager.save_geometry(rect.x(), rect.y(), rect.width(), rect.height())
 
         super().mouseReleaseEvent(event)
+
+    def closeEvent(self, event) -> None:
+        """Handle window close request.
+
+        If application exit has not been explicitly triggered (e.g. user clicked window close
+        or OS sent close), hide the window to tray instead of quitting the application.
+        When _allow_window_close is True (tray Exit requested), allow the window to close.
+        """
+        if not self._allow_window_close:
+            event.ignore()
+            self.hide()
+            logger.debug("Window close ignored; hidden to system tray.")
+        else:
+            event.accept()

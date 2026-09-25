@@ -177,7 +177,12 @@ def print_stage_z_order(label: str, window, target_hwnd: int) -> None:
             print(f"    {row}")
 
     print("-" * 115)
-    print(f"Total Participative Windows: {len(entries)} | Target Sticky Z-Index: {target_pos} (0 is front-most)")
+    windows_above = target_pos if target_pos is not None else 0
+    windows_below = (len(entries) - 1 - target_pos) if target_pos is not None else 0
+    print(f"Total Participative Windows: {len(entries)}")
+    print(f"Daily Sticky Z-order position: {target_pos} (0 is front-most)")
+    print(f"Windows above Daily Sticky: {windows_above}")
+    print(f"Windows below Daily Sticky: {windows_below}")
     print("=" * 80 + "\n")
 
 

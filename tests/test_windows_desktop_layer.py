@@ -41,7 +41,7 @@ def test_windows_desktop_controller_safe_on_invalid_hwnd():
 
 
 def test_windows_desktop_controller_mocked_success(monkeypatch):
-    """Verify attach flow with mocked native helpers (top-level, no SetParent)."""
+    """Verify attach flow with mocked native helpers (top-level, no SetParent, invokes set_window_bottom)."""
     calls = []
 
     def mock_set_window_ex_style(hwnd, add_flags, remove_flags):

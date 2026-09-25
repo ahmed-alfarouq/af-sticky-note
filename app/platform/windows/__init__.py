@@ -13,16 +13,21 @@ from app.platform.interfaces import (
 )
 from app.platform.unsupported import NoOpStartupManager, NoOpSystemTrayController
 from app.platform.windows.desktop_window import WindowsDesktopWindowController
+from app.platform.windows.startup import WindowsStartupManager
 from app.platform.windows.tray import WindowsSystemTrayController
 
 
 class WindowsPlatformAdapter(PlatformAdapter):
     """PlatformAdapter implementation for Microsoft Windows."""
 
-    def __init__(self, tray_controller: SystemTrayController | None = None) -> None:
+    def __init__(
+        self,
+        tray_controller: SystemTrayController | None = None,
+        startup_manager: StartupManager | None = None,
+    ) -> None:
         self._name = "windows"
         self._window_controller = WindowsDesktopWindowController()
-        self._startup_manager = NoOpStartupManager()
+        self._startup_manager = startup_manager or WindowsStartupManager()
         self._tray_controller = tray_controller or WindowsSystemTrayController()
 
     @property

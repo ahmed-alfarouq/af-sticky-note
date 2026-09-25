@@ -96,7 +96,7 @@ def bootstrap_application(app: QApplication) -> MainWindow:
     assert day.id is not None, "Day id is always populated after database retrieval/creation"
     initial_tasks = task_service.get_today_tasks(day.id)
 
-    # 4. Create MainWindow
+    # 4. Create MainWindow (restores saved geometry automatically)
     window = MainWindow(
         day=day,
         quote_text=quote_text,
@@ -108,8 +108,7 @@ def bootstrap_application(app: QApplication) -> MainWindow:
     platform_adapter = get_platform_adapter()
     logger.info("Platform adapter resolved: %s (supported=%s)", platform_adapter.name, platform_adapter.is_supported)
 
-    # Position on screen and show
-    window.setGeometry(100, 100, 380, 560)
+    # Show window using its restored/validated geometry
     window.show()
     window.raise_()
     window.activateWindow()

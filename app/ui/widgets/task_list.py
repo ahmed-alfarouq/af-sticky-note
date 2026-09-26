@@ -4,7 +4,8 @@ from __future__ import annotations
 from typing import Dict, Optional, Sequence
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtGui import QAction, QContextMenuEvent
+from PySide6.QtWidgets import QFrame, QMenu, QScrollArea, QVBoxLayout, QWidget
 
 from app.core.models import Task
 from app.ui.widgets.task_item import TaskItem
@@ -14,6 +15,9 @@ class TaskList(QScrollArea):
     """Scrollable container managing visual TaskItem instances."""
 
     task_completed_toggled = Signal(int, bool)  # task_id, is_completed
+    task_edit_requested = Signal(int)           # task_id
+    task_delete_requested = Signal(int)         # task_id
+    clear_completed_requested = Signal()        # emit to clear completed tasks for today
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -49,11 +53,19 @@ class TaskList(QScrollArea):
 
         item = TaskItem(task, self._container)
         item.completed_toggled.connect(self.task_completed_toggled.emit)
+        item.edit_requested.connect(self.task_edit_requested.emit)
+        item.delete_requested.connect(self.task_delete_requested.emit)
 
         # Insert before the trailing stretch item
         stretch_index = max(0, self._layout.count() - 1)
         self._layout.insertWidget(stretch_index, item)
         self._items[task.id] = item
+
+    def update_task_text(self, task_id: int, new_text: str) -> None:
+        """Update the text of a specific task item."""
+        item = self._items.get(task_id)
+        if item is not None:
+            item.update_task_text(new_text)
 
     def remove_task(self, task_id: int) -> None:
         """Remove a TaskItem from the visual list."""
@@ -68,3 +80,15 @@ class TaskList(QScrollArea):
             self._layout.removeWidget(item)
             item.deleteLater()
         self._items.clear()
+
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
+        """Show list context menu offering 'Clear completed'."""
+        menu = QMenu(self)
+        menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+
+        clear_action = QAction("حذف المهام المكتملة", menu)
+        clear_action.triggered.connect(self.clear_completed_requested.emit)
+        menu.addAction(clear_action)
+
+        menu.exec(event.globalPos())
+        event.accept()

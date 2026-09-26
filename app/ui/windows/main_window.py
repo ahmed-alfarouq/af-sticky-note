@@ -133,6 +133,9 @@ class MainWindow(QMainWindow):
         # 3. Scrollable Task List
         self._task_list = TaskList(parent=self._paper_frame)
         self._task_list.task_completed_toggled.connect(self._on_task_completed_toggled)
+        self._task_list.task_edit_requested.connect(self._on_task_edit_requested)
+        self._task_list.task_delete_requested.connect(self._on_task_delete_requested)
+        self._task_list.clear_completed_requested.connect(self._on_clear_completed_requested)
         self._task_list.set_tasks(initial_tasks)
         paper_layout.addWidget(self._task_list, 1)
 
@@ -179,6 +182,43 @@ class MainWindow(QMainWindow):
             self._task_service.toggle_task_completion(task_id, is_completed)
         except Exception as exc:
             logger.error("Failed to toggle completion for task %d: %s", task_id, exc)
+
+    def _on_task_edit_requested(self, task_id: int) -> None:
+        """Open edit dialog and persist updated task text."""
+        try:
+            # Find current text from UI item or task service
+            task_item = self._task_list._items.get(task_id)
+            current_text = task_item._text_label.text() if task_item else ""
+
+            from app.ui.widgets.task_edit_dialog import TaskEditDialog
+            dialog = TaskEditDialog(initial_text=current_text, parent=self)
+            if dialog.exec():
+                new_text = dialog.get_text()
+                if new_text and new_text != current_text:
+                    if self._task_service.update_task_text(task_id, new_text):
+                        self._task_list.update_task_text(task_id, new_text)
+        except Exception as exc:
+            logger.error("Failed to edit task %d: %s", task_id, exc)
+
+    def _on_task_delete_requested(self, task_id: int) -> None:
+        """Handle deletion of a specific task."""
+        try:
+            self._task_service.delete_task(task_id)
+            self._task_list.remove_task(task_id)
+        except Exception as exc:
+            logger.error("Failed to delete task %d: %s", task_id, exc)
+
+    def _on_clear_completed_requested(self) -> None:
+        """Clear all completed tasks for today's active day."""
+        if self._day.id is None:
+            return
+        try:
+            self._task_service.clear_completed_tasks(self._day.id)
+            # Refresh list with remaining tasks
+            remaining_tasks = self._task_service.get_today_tasks(self._day.id)
+            self._task_list.set_tasks(remaining_tasks)
+        except Exception as exc:
+            logger.error("Failed to clear completed tasks for day %d: %s", self._day.id, exc)
 
     # -------------------------------------------------------------------------
     # Dragging & Resizing Event Handlers (Phase 5G-A)

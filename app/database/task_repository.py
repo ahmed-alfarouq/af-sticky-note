@@ -95,6 +95,17 @@ class TaskRepository:
     def delete(self, task_id: int) -> None:
         self._conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
 
+    def delete_completed_for_day(self, day_id: int) -> int:
+        """Delete all completed tasks strictly belonging to the given day_id.
+
+        Returns the number of deleted records.
+        """
+        cursor = self._conn.execute(
+            "DELETE FROM tasks WHERE day_id = ? AND is_completed = 1",
+            (day_id,),
+        )
+        return cursor.rowcount
+
     def _next_position(self, day_id: int) -> int:
         row = self._conn.execute(
             "SELECT COALESCE(MAX(position), -1) + 1 AS next_position FROM tasks WHERE day_id = ?",

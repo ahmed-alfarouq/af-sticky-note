@@ -4,11 +4,13 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction, QContextMenuEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QSizePolicy,
     QWidget,
 )
@@ -17,14 +19,17 @@ from app.core.models import Task
 
 
 class TaskItem(QFrame):
-    """A single task row containing a checkbox and task text label."""
+    """A single task row containing a checkbox, task text label, and context menu."""
 
     completed_toggled = Signal(int, bool)  # task_id, is_completed
+    edit_requested = Signal(int)           # task_id
+    delete_requested = Signal(int)         # task_id
 
     def __init__(self, task: Task, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.task_id = task.id
         self.setObjectName("taskItemFrame")
+        self._task = task
         self._init_ui(task)
 
     def _init_ui(self, task: Task) -> None:
@@ -70,3 +75,24 @@ class TaskItem(QFrame):
         self._checkbox.setChecked(is_completed)
         self._update_label_style(is_completed)
         self._checkbox.blockSignals(False)
+
+    def update_task_text(self, new_text: str) -> None:
+        """Update visible task text."""
+        self._text_label.setText(new_text)
+        self.setAccessibleName(f"مهمة: {new_text}")
+
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
+        """Show context menu for editing or deleting this specific task."""
+        menu = QMenu(self)
+        menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+
+        edit_action = QAction("تعديل المهمة", menu)
+        edit_action.triggered.connect(lambda: self.edit_requested.emit(self.task_id))
+        menu.addAction(edit_action)
+
+        delete_action = QAction("حذف المهمة", menu)
+        delete_action.triggered.connect(lambda: self.delete_requested.emit(self.task_id))
+        menu.addAction(delete_action)
+
+        menu.exec(event.globalPos())
+        event.accept()

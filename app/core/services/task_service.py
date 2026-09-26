@@ -80,3 +80,11 @@ class TaskService:
             return False
         self._task_repo.update_text(task_id=task_id, text=cleaned)
         return True
+
+    def clear_completed_tasks(self, day_id: int) -> int:
+        """Clear all completed tasks for a specific day.
+
+        Returns the count of deleted tasks.
+        Guarantees that other days' task records are never affected.
+        """
+        return self._task_repo.delete_completed_for_day(day_id=day_id)

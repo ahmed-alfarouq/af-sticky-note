@@ -44,6 +44,7 @@ class MainWindow(QMainWindow):
         initial_tasks: Sequence[Task] = (),
         geometry_manager: Optional[WindowGeometryManager] = None,
         history_service: Optional[object] = None,
+        startup_manager: Optional[object] = None,
         on_exit_requested: Optional[Callable[[], None]] = None,
         parent: Optional[QWidget] = None,
     ) -> None:
@@ -52,7 +53,9 @@ class MainWindow(QMainWindow):
         self._task_service = task_service
         self._geometry_manager = geometry_manager or WindowGeometryManager()
         self._history_service = history_service
+        self._startup_manager = startup_manager
         self._on_exit_requested = on_exit_requested
+        self._settings_window: Optional[QWidget] = None
 
         # Dragging state
         self._is_dragging: bool = False
@@ -162,6 +165,7 @@ class MainWindow(QMainWindow):
         self._task_list.task_delete_requested.connect(self._on_task_delete_requested)
         self._task_list.clear_completed_requested.connect(self._on_clear_completed_requested)
         self._task_list.history_requested.connect(self._on_history_requested)
+        self._task_list.settings_requested.connect(self._on_settings_requested)
         self._task_list.set_tasks(initial_tasks)
         paper_layout.addWidget(self._task_list, 1)
 
@@ -261,6 +265,21 @@ class MainWindow(QMainWindow):
             history_win.exec()
         except Exception as exc:
             logger.error("Failed to open History window: %s", exc)
+
+    def _on_settings_requested(self) -> None:
+        """Open the Settings dialog, reusing or activating an existing instance."""
+        if self._startup_manager is None:
+            logger.warning("StartupManager not configured on MainWindow")
+            return
+        try:
+            from app.ui.windows.settings_window import SettingsWindow
+            settings_dialog = SettingsWindow(
+                startup_manager=self._startup_manager,
+                parent=self,
+            )
+            settings_dialog.exec()
+        except Exception as exc:
+            logger.error("Failed to open Settings window: %s", exc)
 
     def _on_exit_clicked(self) -> None:
         """Handle top-left exit control click.

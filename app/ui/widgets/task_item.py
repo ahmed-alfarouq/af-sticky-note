@@ -34,8 +34,8 @@ class TaskItem(QFrame):
 
     def _init_ui(self, task: Task) -> None:
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(12)
+        layout.setContentsMargins(12, 9, 12, 9)
+        layout.setSpacing(10)
 
         self._checkbox = QCheckBox(self)
         self._checkbox.setChecked(task.is_completed)
@@ -54,6 +54,16 @@ class TaskItem(QFrame):
         # Checkbox first on the right in RTL, followed by text next to it
         layout.addWidget(self._checkbox)
         layout.addWidget(self._text_label, 1)
+
+        # Subtle, restrained priority indicator if high or low
+        if task.priority and task.priority.value == "HIGH":
+            self._priority_badge = QLabel("عاجل", self)
+            self._priority_badge.setObjectName("priorityBadgeHigh")
+            layout.addWidget(self._priority_badge)
+        elif task.priority and task.priority.value == "LOW":
+            self._priority_badge = QLabel("منخفض", self)
+            self._priority_badge.setObjectName("priorityBadgeLow")
+            layout.addWidget(self._priority_badge)
 
     def _on_toggled(self, checked: bool) -> None:
         self._update_label_style(checked)

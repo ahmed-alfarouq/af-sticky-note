@@ -27,13 +27,15 @@ class TaskList(QScrollArea):
         self.setObjectName("taskListScroll")
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setAccessibleName("قائمة مهام اليوم")
         self.setAccessibleDescription("عرض المهام اليومية مع إمكانية تحديد إنجازها")
 
         self._container = QWidget(self)
         self._container.setObjectName("taskListContainer")
+        self._container.setMinimumWidth(0)
         self._layout = QVBoxLayout(self._container)
-        self._layout.setContentsMargins(0, 4, 0, 4)
+        self._layout.setContentsMargins(0, 2, 0, 0)
         self._layout.setSpacing(8)
         self._layout.addStretch(1)
 

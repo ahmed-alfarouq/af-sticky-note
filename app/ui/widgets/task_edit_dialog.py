@@ -9,7 +9,6 @@ from typing import Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -20,8 +19,8 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.models import TaskPriority
-from app.ui.priority_presentation import populate_priority_combo, priority_from_combo
 from app.ui.styles.app_style import get_application_stylesheet
+from app.ui.widgets.priority_selector import PrioritySelector
 
 
 class TaskEditDialog(QDialog):
@@ -51,7 +50,9 @@ class TaskEditDialog(QDialog):
 
         self._input_field = QLineEdit(self)
         self._input_field.setObjectName("taskInputField")
+        self._input_field.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self._input_field.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._input_field.setTextMargins(12, 0, 14, 0)
         self._input_field.setText(initial_text)
         self._input_field.setAccessibleName("نص المهمة")
         self._input_field.selectAll()
@@ -60,15 +61,12 @@ class TaskEditDialog(QDialog):
         priority_label = QLabel("الأولوية:", self)
         priority_label.setObjectName("taskEditLabel")
 
-        self._priority_combo = QComboBox(self)
-        self._priority_combo.setAccessibleName("أولوية المهمة")
-        self._priority_combo.setToolTip("أولوية المهمة")
-        populate_priority_combo(self._priority_combo, initial_priority, compact=False)
+        self._priority_selector = PrioritySelector(initial_priority, self)
 
         priority_row = QHBoxLayout()
         priority_row.setSpacing(8)
         priority_row.addWidget(priority_label)
-        priority_row.addWidget(self._priority_combo)
+        priority_row.addWidget(self._priority_selector)
         priority_row.addStretch(1)
         layout.addLayout(priority_row)
 
@@ -108,4 +106,4 @@ class TaskEditDialog(QDialog):
 
     def get_priority(self) -> TaskPriority:
         """Return the priority currently selected in the dialog."""
-        return priority_from_combo(self._priority_combo)
+        return self._priority_selector.priority()

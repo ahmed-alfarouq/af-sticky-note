@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QLabel, QLineEdit
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QLineEdit, QToolButton
 
 from app.core.models import Day, Task, TaskPriority
 from app.core.services.history_service import HistoryService
@@ -23,6 +23,39 @@ from app.ui.widgets.task_input import TaskInput
 from app.ui.widgets.task_item import TaskItem
 from app.ui.windows.history_window import HistoryWindow
 from app.ui.windows.main_window import MainWindow
+
+
+def test_task_row_text_is_rtl_and_checkbox_is_physical_right(qapp):
+    item = TaskItem(_sample_task(TaskPriority.HIGH, text="مهمة تجريبية"))
+    assert item.layoutDirection() == Qt.LayoutDirection.LeftToRight
+    assert item._text_label.layoutDirection() == Qt.LayoutDirection.RightToLeft
+    assert item._text_label.alignment() == (
+        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+    )
+
+    item.resize(360, 56)
+    item.show()
+    qapp.processEvents()
+    text_rect = item._text_label.geometry()
+    box_rect = item._checkbox.geometry()
+    badge = item._priority_badge
+    assert box_rect.center().x() > text_rect.center().x()
+    assert badge.isHidden() is False
+    assert badge.geometry().right() <= text_rect.left() + 2
+    assert text_rect.right() <= box_rect.left() + 2
+    item.close()
+
+
+def test_long_task_text_wraps_across_the_row_not_into_a_column(qapp):
+    text = "هذا نص عربي طويل يجب أن يلتف بعرض البطاقة ويبقى الشارة ملاصقة للنص"
+    item = TaskItem(_sample_task(TaskPriority.HIGH, text=text))
+    item.resize(360, 120)
+    item.show()
+    qapp.processEvents()
+    assert item._text_label.width() > 160
+    assert item._priority_badge.geometry().right() <= item._text_label.geometry().left() + 4
+    assert item._checkbox.geometry().center().x() > item._text_label.geometry().center().x()
+    item.close()
 
 
 @pytest.fixture(scope="module")
@@ -88,22 +121,21 @@ def _visible_badges(root):
 def test_new_task_selector_defaults_to_medium_and_submits_choice(qapp):
     row = TaskInput()
     assert row.priority() == TaskPriority.MEDIUM
-    assert row.layoutDirection() == Qt.LayoutDirection.RightToLeft
+    # Physical placement is explicit. Text direction lives on the field.
+    assert row.layoutDirection() == Qt.LayoutDirection.LeftToRight
 
-    combo = row.findChild(QComboBox, "taskPrioritySelector")
+    selector = row.findChild(QToolButton, "taskPriorityButton")
     edit = row.findChild(QLineEdit, "taskInputField")
-    assert combo is not None and edit is not None
-    assert [combo.itemText(i) for i in range(combo.count())] == [
-        PRIORITY_LABELS_AR[TaskPriority.HIGH],
-        PRIORITY_LABELS_AR[TaskPriority.MEDIUM],
-        PRIORITY_LABELS_AR[TaskPriority.LOW],
-    ]
+    assert selector is not None and edit is not None
+    assert selector.text().startswith(PRIORITY_LABELS_AR[TaskPriority.MEDIUM])
+    assert edit.layoutDirection() == Qt.LayoutDirection.RightToLeft
+    assert edit.alignment() == (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
     row.resize(420, 48)
     row.show()
     qapp.processEvents()
     # Typing field is the primary control on the physical right.
-    assert edit.geometry().x() > combo.geometry().x()
+    assert edit.geometry().x() > selector.geometry().x()
 
     captured = []
     row.task_submitted.connect(lambda text, priority: captured.append((text, priority)))
@@ -167,14 +199,17 @@ def test_edit_dialog_loads_current_priority_and_rejects_blank_text(qapp):
     assert dialog.layoutDirection() == Qt.LayoutDirection.RightToLeft
     assert dialog.get_text() == "مهمة عاجلة"
     assert dialog.get_priority() == TaskPriority.HIGH
-    assert dialog.findChild(QComboBox, "taskPrioritySelector").currentText() == "عاجل"
+    assert dialog.findChild(QToolButton, "taskPriorityButton").text().startswith("عاجل")
+    assert dialog._input_field.alignment() == (
+        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+    )
 
     dialog._input_field.setText("   ")
     dialog.accept()
     assert dialog.result() != QDialog.DialogCode.Accepted
 
     dialog._input_field.setText("نص محدّث")
-    dialog._priority_combo.setCurrentIndex(dialog._priority_combo.findData(TaskPriority.LOW.value))
+    dialog._priority_selector.set_priority(TaskPriority.LOW)
     dialog.accept()
     assert dialog.result() == QDialog.DialogCode.Accepted
     assert dialog.get_text() == "نص محدّث"
@@ -186,9 +221,9 @@ def test_edit_dialog_preselects_low_and_medium(qapp):
     low = TaskEditDialog("منخفضة", TaskPriority.LOW)
     medium = TaskEditDialog("عادية", TaskPriority.MEDIUM)
     assert low.get_priority() == TaskPriority.LOW
-    assert low.findChild(QComboBox, "taskPrioritySelector").currentText() == "منخفض"
+    assert low.findChild(QToolButton, "taskPriorityButton").text().startswith("منخفض")
     assert medium.get_priority() == TaskPriority.MEDIUM
-    assert medium.findChild(QComboBox, "taskPrioritySelector").currentText() == "عادي"
+    assert medium.findChild(QToolButton, "taskPriorityButton").text().startswith("عادي")
     low.close()
     medium.close()
 
@@ -352,12 +387,21 @@ def test_history_window_shows_historical_priority_badges(qapp, db_connection):
 
 
 def test_priority_controls_do_not_move_exit_button(qapp, db_connection):
+    previous = qapp.layoutDirection()
+    qapp.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
     window, _, _ = _open_window(qapp, db_connection)
     window.resize(380, 560)
     window.show()
     qapp.processEvents()
-    # Header construction is unchanged: exit remains the first control in the row.
-    header_layout = window._header_frame.layout()
-    assert header_layout.itemAt(0).widget() is window._exit_btn
-    assert window._exit_btn.text() == "✕"
-    window.close()
+    try:
+        header_layout = window._header_frame.layout()
+        assert header_layout.itemAt(0).widget() is window._exit_btn
+        assert window._exit_btn.text() == "✕"
+        assert window._header_frame.layoutDirection() == Qt.LayoutDirection.LeftToRight
+        exit_x = window._exit_btn.mapTo(window, window._exit_btn.rect().center()).x()
+        pin_x = window._pin_widget.mapTo(window, window._pin_widget.rect().center()).x()
+        assert exit_x < window.width() / 3
+        assert exit_x < pin_x
+    finally:
+        qapp.setLayoutDirection(previous)
+        window.close()

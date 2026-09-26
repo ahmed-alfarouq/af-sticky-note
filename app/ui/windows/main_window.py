@@ -26,6 +26,13 @@ from app.core.models import Day, Task, TaskPriority
 from app.core.services.task_service import TaskService
 from app.infrastructure.paths import get_logo_path
 from app.ui.geometry_manager import WindowGeometryManager
+from app.ui.layout_metrics import (
+    OUTER_MARGIN,
+    PAPER_MARGIN_BOTTOM,
+    PAPER_MARGIN_H,
+    PAPER_MARGIN_TOP,
+    PAPER_SPACING,
+)
 from app.ui.styles.app_style import get_application_stylesheet
 from app.ui.widgets.quote_widget import QuoteWidget
 from app.ui.widgets.task_input import TaskInput
@@ -114,7 +121,7 @@ class MainWindow(QMainWindow):
     ) -> None:
         # Outer board layout
         outer_layout = QVBoxLayout(self._central_widget)
-        outer_layout.setContentsMargins(14, 14, 14, 14)
+        outer_layout.setContentsMargins(OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN)
         outer_layout.setSpacing(0)
 
         # Sticky Note paper surface
@@ -124,20 +131,28 @@ class MainWindow(QMainWindow):
         outer_layout.addWidget(self._paper_frame)
 
         paper_layout = QVBoxLayout(self._paper_frame)
-        paper_layout.setContentsMargins(16, 12, 16, 16)
-        paper_layout.setSpacing(12)
+        paper_layout.setContentsMargins(
+            PAPER_MARGIN_H,
+            PAPER_MARGIN_TOP,
+            PAPER_MARGIN_H,
+            PAPER_MARGIN_BOTTOM,
+        )
+        paper_layout.setSpacing(PAPER_SPACING)
 
-        # 1. Decorative Pin Header (Designated Drag Area) with Right-Side Control Icons
+        # 1. Header. Physical LeftToRight so Exit stays top-left even when
+        # the application direction is RTL. Arabic content direction does
+        # not move architectural controls.
         self._header_frame = QFrame(self._paper_frame)
         self._header_frame.setObjectName("headerFrame")
+        self._header_frame.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         self._header_frame.setCursor(Qt.CursorShape.ArrowCursor)
 
         pin_row = QHBoxLayout(self._header_frame)
         pin_row.setContentsMargins(0, 0, 0, 4)
         pin_row.setSpacing(4)
 
-        # Right-side Action Buttons: ordered Exit -> History -> Settings
-        # 1. Exit Button
+        # Physical left → right: Exit, History, Settings. The trailing
+        # spacer balances that group so the pin stays centered.
         self._exit_btn = QPushButton("✕", self._header_frame)
         self._exit_btn.setObjectName("exitButton")
         self._exit_btn.setAccessibleName("إغلاق التطبيق نهائياً")

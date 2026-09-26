@@ -1,21 +1,23 @@
-"""Task input row: text field plus a compact priority selector."""
+"""Task input row: dominant text field plus a compact priority control."""
 from __future__ import annotations
 
 from typing import Optional
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLineEdit, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QWidget
 
 from app.core.models import TaskPriority
-from app.ui.priority_presentation import populate_priority_combo, priority_from_combo
+from app.ui.layout_metrics import INPUT_GAP
+from app.ui.widgets.priority_selector import PrioritySelector
 
 
 class TaskInput(QWidget):
-    """Bottom input row for adding a task.
+    """Bottom entry row.
 
-    MEDIUM (عادي) is the initial selection. Enter in the text field submits
-    the current text together with the selected priority. The selector is a
-    compact accessory; it does not turn the row into a form.
+    Physical placement is explicit and independent of application RTL:
+    the text field is on the right, the priority control is the compact
+    accessory on the left. The field itself is RTL so Arabic placeholder
+    and typed text start on the right.
     """
 
     # raw text, TaskPriority value ("LOW" / "MEDIUM" / "HIGH")
@@ -24,39 +26,37 @@ class TaskInput(QWidget):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("taskInputRow")
-        # Widget direction, not layout.setLayoutDirection().
-        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        self.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         self.setAutoFillBackground(False)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(INPUT_GAP)
 
         self._line_edit = QLineEdit(self)
         self._line_edit.setObjectName("taskInputField")
+        self._line_edit.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self._line_edit.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._line_edit.setPlaceholderText("+ اكتب مهمة جديدة...")
+        # Physical right padding. Not mirrored by stylesheet RTL.
+        self._line_edit.setTextMargins(12, 0, 14, 0)
+        self._line_edit.setPlaceholderText("اكتب مهمة جديدة...")
         self._line_edit.setAccessibleName("حقل إدخال مهمة جديدة")
         self._line_edit.setAccessibleDescription("اكتب نص المهمة واضغط زر الإدخال لإضافتها")
         self._line_edit.returnPressed.connect(self._on_return_pressed)
 
-        self._priority_combo = QComboBox(self)
-        self._priority_combo.setAccessibleName("أولوية المهمة الجديدة")
-        self._priority_combo.setAccessibleDescription("اختر عاجل أو عادي أو منخفض. الافتراضي عادي")
-        self._priority_combo.setToolTip("أولوية المهمة")
-        populate_priority_combo(self._priority_combo, TaskPriority.MEDIUM, compact=True)
-        # After the user picks a priority, return to the text field so Enter submits.
-        self._priority_combo.activated.connect(self._return_focus_to_text)
+        self._priority_selector = PrioritySelector(TaskPriority.MEDIUM, self)
+        self._priority_selector.menu().triggered.connect(self._return_focus_to_text)
 
-        # RTL: first widget sits on the physical right (the typing field).
-        # The compact selector is the accessory on the physical left.
+        # Physical left → right: selector, then the dominant field.
+        layout.addWidget(self._priority_selector, 0, Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(self._line_edit, 1)
-        layout.addWidget(self._priority_combo, 0)
+
+        self.setTabOrder(self._line_edit, self._priority_selector)
 
     def _on_return_pressed(self) -> None:
         self.task_submitted.emit(self.text(), self.priority().value)
 
-    def _return_focus_to_text(self, _index: int = 0) -> None:
+    def _return_focus_to_text(self, *_args) -> None:
         self._line_edit.setFocus()
 
     def text(self) -> str:
@@ -70,10 +70,10 @@ class TaskInput(QWidget):
         self._line_edit.clear()
 
     def priority(self) -> TaskPriority:
-        return priority_from_combo(self._priority_combo)
+        return self._priority_selector.priority()
 
     def set_priority(self, priority: TaskPriority) -> None:
-        populate_priority_combo(self._priority_combo, priority, compact=True)
+        self._priority_selector.set_priority(priority)
 
     def reset_priority(self) -> None:
         """Return the selector to the neutral default."""

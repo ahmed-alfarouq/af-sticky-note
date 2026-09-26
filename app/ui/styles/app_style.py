@@ -198,7 +198,7 @@ def get_application_stylesheet() -> str:
         border-radius: 4px;
         font-size: 11px;
         font-weight: 600;
-        padding: 2px 6px;
+        padding: 3px 8px;
     }}
 
     QLabel#priorityBadgeLow {{
@@ -208,10 +208,17 @@ def get_application_stylesheet() -> str:
         border-radius: 4px;
         font-size: 11px;
         font-weight: 600;
-        padding: 2px 6px;
+        padding: 3px 8px;
     }}
 
     /* Checkbox Styling with clear accessible states */
+    QCheckBox#taskCheckBox {{
+        spacing: 0px;
+        padding: 0px;
+        margin: 0px;
+        background: transparent;
+    }}
+
     QCheckBox {{
         spacing: 8px;
     }}
@@ -246,8 +253,9 @@ def get_application_stylesheet() -> str:
         color: {COLOR_TEXT_PRIMARY};
         border: 1.5px solid {COLOR_CARD_BORDER};
         border-radius: 8px;
-        padding: 9px 14px;
+        padding: 8px 4px;
         font-size: 13.5px;
+        min-height: 22px;
     }}
 
     QLineEdit#taskInputField:hover {{
@@ -295,31 +303,32 @@ def get_application_stylesheet() -> str:
         border-color: {COLOR_SOFT};
     }}
 
-    /* Compact priority selector — same surface language as the text field */
-    QComboBox#taskPrioritySelector {{
+    /* One surface for the priority value. No detached combo drop-down box. */
+    QToolButton#taskPriorityButton {{
         background-color: {COLOR_INPUT_BG};
         color: {COLOR_TEXT_PRIMARY};
         border: 1.5px solid {COLOR_CARD_BORDER};
         border-radius: 8px;
-        padding: 6px 8px;
-        font-size: 12.5px;
+        padding: 8px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        min-height: 22px;
+        min-width: 72px;
     }}
 
-    QComboBox#taskPrioritySelector:hover {{
+    QToolButton#taskPriorityButton:hover {{
         border-color: #384860;
+        background-color: #18202F;
     }}
 
-    QComboBox#taskPrioritySelector:focus {{
+    QToolButton#taskPriorityButton:focus {{
         border: 2px solid {COLOR_FOCUS_RING};
     }}
 
-    QComboBox#taskPrioritySelector QAbstractItemView {{
-        background-color: {COLOR_SURFACE};
-        color: {COLOR_TEXT_PRIMARY};
-        selection-background-color: #232C3D;
-        selection-color: #FFFFFF;
-        border: 1px solid {COLOR_CARD_BORDER};
-        outline: 0;
+    QToolButton#taskPriorityButton::menu-indicator {{
+        image: none;
+        width: 0px;
+        height: 0px;
     }}
 
     /* Common Close & Action Buttons (History & Settings) */

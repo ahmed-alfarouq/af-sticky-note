@@ -26,12 +26,76 @@ from PySide6.QtWidgets import (
 
 from app.core.models import Task
 from app.core.services.history_service import DayHistoryView, HistoryService
-from app.ui.priority_presentation import label_for, make_priority_badge
+from app.ui.layout_metrics import TASK_ROW_GAP, TASK_ROW_MARGIN_H, TASK_ROW_MARGIN_V
+from app.ui.priority_presentation import label_for
+from app.ui.widgets.arabic_task_cluster import ArabicTaskCluster
 from app.infrastructure.clock import format_dual_calendar_date
 from app.infrastructure.paths import get_logo_path
 from app.ui.styles.app_style import get_application_stylesheet
 
 logger = logging.getLogger(__name__)
+
+
+class _HistoryTaskRow(QFrame):
+    """Physical task line for history: status on the right, badge beside the text."""
+
+    def __init__(self, task: Task, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("taskItemFrame")
+        self.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(
+            TASK_ROW_MARGIN_H,
+            TASK_ROW_MARGIN_V,
+            TASK_ROW_MARGIN_H,
+            TASK_ROW_MARGIN_V,
+        )
+        row.setSpacing(TASK_ROW_GAP)
+        self._row = row
+
+        self._indicator = QLabel(self)
+        if task.is_completed:
+            self._indicator.setText("✔")
+            self._indicator.setStyleSheet("color: #4CAF50; font-size: 14px; font-weight: bold;")
+        else:
+            self._indicator.setText("○")
+            self._indicator.setStyleSheet("color: #8C96A8; font-size: 14px;")
+
+        self._cluster = ArabicTaskCluster(task.text, task.priority, task.is_completed, self)
+
+        row.addStretch(1)
+        row.addWidget(self._cluster, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(self._indicator, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        status_text = "مكتملة" if task.is_completed else "غير مكتملة"
+        self.setAccessibleName(f"مهمة: {task.text}")
+        self.setAccessibleDescription(
+            f"الحالة: {status_text} • الأولوية: {label_for(task.priority)}"
+        )
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._fit()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._fit()
+
+    def _fit(self) -> None:
+        width = self.width()
+        parent = self.parentWidget()
+        while parent is not None:
+            if isinstance(parent, QScrollArea):
+                width = min(width, parent.viewport().width())
+                break
+            parent = parent.parentWidget()
+        if width < 80:
+            return
+        margins = self._row.contentsMargins()
+        indicator_w = max(self._indicator.sizeHint().width(), 16)
+        available = width - margins.left() - margins.right() - indicator_w - self._row.spacing()
+        self._cluster.fit(available)
 
 
 class HistoryWindow(QDialog):
@@ -199,42 +263,7 @@ class HistoryWindow(QDialog):
 
     def _create_read_only_task_row(self, task: Task) -> QFrame:
         """Create a purely read-only visual representation of a historical task."""
-        frame = QFrame(self._task_container)
-        frame.setObjectName("taskItemFrame")
-
-        row = QHBoxLayout(frame)
-        row.setContentsMargins(12, 10, 12, 10)
-        row.setSpacing(10)
-
-        # Status indicator icon/symbol (no clickable checkbox)
-        indicator = QLabel(frame)
-        if task.is_completed:
-            indicator.setText("✔")
-            indicator.setStyleSheet("color: #4CAF50; font-size: 14px; font-weight: bold;")
-        else:
-            indicator.setText("○")
-            indicator.setStyleSheet("color: #8C96A8; font-size: 14px;")
-
-        text_label = QLabel(task.text, frame)
-        text_label.setWordWrap(True)
-        if task.is_completed:
-            text_label.setObjectName("taskTextLabelCompleted")
-        else:
-            text_label.setObjectName("taskTextLabel")
-
-        row.addWidget(indicator)
-        row.addWidget(text_label, 1)
-
-        # Same badge language as the live list: HIGH/LOW only, MEDIUM has none.
-        badge = make_priority_badge(task.priority, frame)
-        row.addWidget(badge)
-
-        status_text = "مكتملة" if task.is_completed else "غير مكتملة"
-        frame.setAccessibleName(f"مهمة: {task.text}")
-        frame.setAccessibleDescription(
-            f"الحالة: {status_text} • الأولوية: {label_for(task.priority)}"
-        )
-        return frame
+        return _HistoryTaskRow(task, self._task_container)
 
     def _on_prev_day(self) -> None:
         """Navigate to earlier recorded day."""

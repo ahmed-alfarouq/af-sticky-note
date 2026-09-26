@@ -199,7 +199,7 @@ def test_stylesheet_alignment_expression_does_not_drop_later_rules():
     stylesheet = get_application_stylesheet()
     assert "qproperty-alignment: Align" not in stylesheet
     assert "QLabel#priorityBadgeHigh" in stylesheet
-    assert "QComboBox#taskPrioritySelector" in stylesheet
+    assert "QToolButton#taskPriorityButton" in stylesheet
 
 
 def test_priority_does_not_reorder_tasks(db_connection):

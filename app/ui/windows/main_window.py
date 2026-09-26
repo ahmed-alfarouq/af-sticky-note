@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.config.settings import APP_NAME
-from app.core.models import Day, Task
+from app.core.models import Day, Task, TaskPriority
 from app.core.services.task_service import TaskService
 from app.infrastructure.paths import get_logo_path
 from app.ui.geometry_manager import WindowGeometryManager
@@ -190,6 +190,7 @@ class MainWindow(QMainWindow):
         self._task_list.task_completed_toggled.connect(self._on_task_completed_toggled)
         self._task_list.task_edit_requested.connect(self._on_task_edit_requested)
         self._task_list.task_delete_requested.connect(self._on_task_delete_requested)
+        self._task_list.task_priority_change_requested.connect(self._on_task_priority_change_requested)
         self._task_list.clear_completed_requested.connect(self._on_clear_completed_requested)
         self._task_list.history_requested.connect(self._on_history_requested)
         self._task_list.settings_requested.connect(self._on_settings_requested)
@@ -212,7 +213,7 @@ class MainWindow(QMainWindow):
         self._quote_widget.set_date_and_quote(day.date, quote_text)
         self._task_list.set_tasks(tasks)
 
-    def _on_task_submitted(self, raw_text: str) -> None:
+    def _on_task_submitted(self, raw_text: str, priority_value: str = TaskPriority.MEDIUM.value) -> None:
         """Handle task submission from TaskInput.
 
         Crucial rule: TaskInput is only cleared AFTER task creation succeeds.
@@ -223,15 +224,27 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            created_task = self._task_service.create_task(self._day.id, raw_text)
+            priority = TaskPriority(priority_value)
+        except (ValueError, TypeError):
+            logger.error("Rejected invalid priority %r for new task", priority_value)
+            return
+
+        try:
+            created_task = self._task_service.create_task(
+                self._day.id,
+                raw_text,
+                priority=priority,
+            )
             if created_task is not None:
                 self._task_list.add_task(created_task)
                 self._task_input.clear()
+                # MEDIUM stays the default for the next task.
+                self._task_input.reset_priority()
             # Retain focus in input field whether text was created or empty
             self._task_input.setFocus()
         except Exception as exc:
             logger.error("Failed to create task %r: %s", raw_text, exc)
-            # Input text is intentionally retained on error
+            # Input text and selected priority are intentionally retained on error
 
     def _on_task_completed_toggled(self, task_id: int, is_completed: bool) -> None:
         """Handle checkbox toggle from TaskList / TaskItem."""
@@ -241,21 +254,64 @@ class MainWindow(QMainWindow):
             logger.error("Failed to toggle completion for task %d: %s", task_id, exc)
 
     def _on_task_edit_requested(self, task_id: int) -> None:
-        """Open edit dialog and persist updated task text."""
+        """Open edit dialog and persist text and priority together."""
         try:
-            # Find current text from UI item or task service
-            task_item = self._task_list._items.get(task_id)
-            current_text = task_item._text_label.text() if task_item else ""
+            current_text = self._task_list.task_text(task_id)
+            current_priority = self._task_list.task_priority(task_id)
+            if current_text is None or current_priority is None:
+                return
 
             from app.ui.widgets.task_edit_dialog import TaskEditDialog
-            dialog = TaskEditDialog(initial_text=current_text, parent=self)
-            if dialog.exec():
-                new_text = dialog.get_text()
-                if new_text and new_text != current_text:
-                    if self._task_service.update_task_text(task_id, new_text):
-                        self._task_list.update_task_text(task_id, new_text)
+            dialog = TaskEditDialog(
+                initial_text=current_text,
+                initial_priority=current_priority,
+                parent=self,
+            )
+            if not dialog.exec():
+                return
+            self._apply_task_edit(task_id, dialog.get_text(), dialog.get_priority())
         except Exception as exc:
             logger.error("Failed to edit task %d: %s", task_id, exc)
+
+    def _apply_task_edit(self, task_id: int, new_text: str, new_priority: TaskPriority) -> bool:
+        """Persist a text+priority edit and refresh the row only after success.
+
+        A rejected edit (blank text, missing task, persistence error) leaves
+        the visible row unchanged.
+        """
+        try:
+            saved = self._task_service.update_task_text_and_priority(
+                task_id,
+                new_text,
+                new_priority,
+            )
+        except Exception as exc:
+            logger.error("Failed to persist edit for task %d: %s", task_id, exc)
+            return False
+        if not saved:
+            return False
+        self._task_list.update_task_text(task_id, new_text.strip())
+        self._task_list.update_task_priority(task_id, new_priority)
+        return True
+
+    def _on_task_priority_change_requested(self, task_id: int, priority_value: str) -> None:
+        """Persist a context-menu priority change without touching task text."""
+        try:
+            priority = TaskPriority(priority_value)
+        except (ValueError, TypeError):
+            logger.error("Rejected invalid priority %r for task %s", priority_value, task_id)
+            return
+
+        current = self._task_list.task_priority(task_id)
+        if current is None or current == priority:
+            return
+
+        try:
+            self._task_service.update_task_priority(task_id, priority)
+        except Exception as exc:
+            logger.error("Failed to update priority for task %d: %s", task_id, exc)
+            return
+        self._task_list.update_task_priority(task_id, priority)
 
     def _on_task_delete_requested(self, task_id: int) -> None:
         """Handle deletion of a specific task."""

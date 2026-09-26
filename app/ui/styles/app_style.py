@@ -174,7 +174,8 @@ def get_application_stylesheet() -> str:
     }}
 
     QLabel#taskTextLabel {{
-        qproperty-alignment: AlignRight | AlignVCenter;
+        /* 130 = AlignRight | AlignVCenter. A flags expression is rejected and drops later rules. */
+        qproperty-alignment: 130;
         color: {COLOR_TEXT_PRIMARY};
         font-size: 14px;
         font-weight: 500;
@@ -182,7 +183,7 @@ def get_application_stylesheet() -> str:
     }}
 
     QLabel#taskTextLabelCompleted {{
-        qproperty-alignment: AlignRight | AlignVCenter;
+        qproperty-alignment: 130;
         color: {COLOR_TEXT_COMPLETED};
         font-size: 14px;
         text-decoration: line-through;
@@ -237,9 +238,10 @@ def get_application_stylesheet() -> str:
         border-color: {COLOR_SUCCESS};
     }}
 
-    /* Task Input Field */
+    /* Task Input Field
+       Alignment is set in code. A flags expression here is rejected by Qt's
+       QSS parser and discards this rule (and can discard rules after it). */
     QLineEdit#taskInputField {{
-        qproperty-alignment: AlignRight | AlignVCenter;
         background-color: {COLOR_INPUT_BG};
         color: {COLOR_TEXT_PRIMARY};
         border: 1.5px solid {COLOR_CARD_BORDER};
@@ -255,6 +257,69 @@ def get_application_stylesheet() -> str:
     QLineEdit#taskInputField:focus {{
         border: 2px solid {COLOR_FOCUS_RING};
         background-color: #151C28;
+    }}
+
+    QWidget#taskInputRow {{
+        background: transparent;
+        border: none;
+    }}
+
+    QDialog#taskEditDialog {{
+        background-color: {COLOR_STICKY_PAPER};
+    }}
+
+    QLabel#taskEditLabel {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: 13px;
+        background: transparent;
+    }}
+
+    QPushButton#saveButton,
+    QPushButton#cancelButton {{
+        background-color: {COLOR_CARD_SURFACE};
+        color: {COLOR_TEXT_PRIMARY};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 6px;
+        padding: 6px 16px;
+        font-size: 13px;
+        min-width: 72px;
+    }}
+
+    QPushButton#saveButton {{
+        background-color: {COLOR_TRUST};
+        border-color: {COLOR_TRUST};
+    }}
+
+    QPushButton#saveButton:hover,
+    QPushButton#cancelButton:hover {{
+        border-color: {COLOR_SOFT};
+    }}
+
+    /* Compact priority selector — same surface language as the text field */
+    QComboBox#taskPrioritySelector {{
+        background-color: {COLOR_INPUT_BG};
+        color: {COLOR_TEXT_PRIMARY};
+        border: 1.5px solid {COLOR_CARD_BORDER};
+        border-radius: 8px;
+        padding: 6px 8px;
+        font-size: 12.5px;
+    }}
+
+    QComboBox#taskPrioritySelector:hover {{
+        border-color: #384860;
+    }}
+
+    QComboBox#taskPrioritySelector:focus {{
+        border: 2px solid {COLOR_FOCUS_RING};
+    }}
+
+    QComboBox#taskPrioritySelector QAbstractItemView {{
+        background-color: {COLOR_SURFACE};
+        color: {COLOR_TEXT_PRIMARY};
+        selection-background-color: #232C3D;
+        selection-color: #FFFFFF;
+        border: 1px solid {COLOR_CARD_BORDER};
+        outline: 0;
     }}
 
     /* Common Close & Action Buttons (History & Settings) */
@@ -316,6 +381,11 @@ def get_application_stylesheet() -> str:
     QMenu::item:selected {{
         background-color: #232C3D;
         color: #FFFFFF;
+    }}
+
+    QMenu::item:checked {{
+        color: {COLOR_SOFT};
+        font-weight: 600;
     }}
 
     QMenu::separator {{

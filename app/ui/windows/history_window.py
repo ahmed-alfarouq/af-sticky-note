@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from app.core.models import Task
 from app.core.services.history_service import DayHistoryView, HistoryService
+from app.ui.priority_presentation import label_for, make_priority_badge
 from app.infrastructure.clock import format_dual_calendar_date
 from app.infrastructure.paths import get_logo_path
 from app.ui.styles.app_style import get_application_stylesheet
@@ -223,6 +224,16 @@ class HistoryWindow(QDialog):
 
         row.addWidget(indicator)
         row.addWidget(text_label, 1)
+
+        # Same badge language as the live list: HIGH/LOW only, MEDIUM has none.
+        badge = make_priority_badge(task.priority, frame)
+        row.addWidget(badge)
+
+        status_text = "مكتملة" if task.is_completed else "غير مكتملة"
+        frame.setAccessibleName(f"مهمة: {task.text}")
+        frame.setAccessibleDescription(
+            f"الحالة: {status_text} • الأولوية: {label_for(task.priority)}"
+        )
         return frame
 
     def _on_prev_day(self) -> None:

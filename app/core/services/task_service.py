@@ -81,6 +81,44 @@ class TaskService:
         self._task_repo.update_text(task_id=task_id, text=cleaned)
         return True
 
+    def update_task_text_and_priority(
+        self,
+        task_id: int,
+        new_text: str,
+        priority: TaskPriority,
+    ) -> bool:
+        """Update text and priority as one logical edit.
+
+        Both inputs are validated before any write. Empty or whitespace-only
+        text is rejected and leaves every field unchanged, including priority.
+        An invalid priority raises ValueError and also writes nothing.
+
+        Uses the existing repository update methods. A field is written only
+        when its value actually changes, so unrelated fields and timestamps
+        are left alone. Returns False if the task does not exist.
+        """
+        if not isinstance(priority, TaskPriority):
+            try:
+                priority = TaskPriority(priority)
+            except (ValueError, TypeError):
+                raise ValueError(f"Invalid task priority: {priority}")
+
+        if new_text is None:
+            return False
+        cleaned = new_text.strip()
+        if not cleaned:
+            return False
+
+        existing = self._task_repo.get_by_id(task_id)
+        if existing is None:
+            return False
+
+        if cleaned != existing.text:
+            self._task_repo.update_text(task_id=task_id, text=cleaned)
+        if priority != existing.priority:
+            self._task_repo.update_priority(task_id=task_id, priority=priority)
+        return True
+
     def clear_completed_tasks(self, day_id: int) -> int:
         """Clear all completed tasks for a specific day.
 

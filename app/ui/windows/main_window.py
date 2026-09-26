@@ -127,15 +127,15 @@ class MainWindow(QMainWindow):
         pin_row.setContentsMargins(0, 0, 0, 4)
         pin_row.setSpacing(4)
 
-        # Right-side Action Buttons (Settings | History | Exit in RTL: Settings is leftmost of group, Exit is rightmost)
-        # 1. Settings button
-        self._settings_btn = QPushButton("⚙", self._header_frame)
-        self._settings_btn.setObjectName("headerIconButton")
-        self._settings_btn.setAccessibleName("فتح الإعدادات")
-        self._settings_btn.setToolTip("الإعدادات")
-        self._settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._settings_btn.clicked.connect(self._on_settings_requested)
-        pin_row.addWidget(self._settings_btn)
+        # Right-side Action Buttons: ordered Exit -> History -> Settings
+        # 1. Exit Button
+        self._exit_btn = QPushButton("✕", self._header_frame)
+        self._exit_btn.setObjectName("exitButton")
+        self._exit_btn.setAccessibleName("إغلاق التطبيق نهائياً")
+        self._exit_btn.setToolTip("إغلاق التطبيق نهائياً")
+        self._exit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._exit_btn.clicked.connect(self._on_exit_clicked)
+        pin_row.addWidget(self._exit_btn)
 
         # 2. History button (paper/document record icon)
         self._history_btn = QPushButton("📄", self._header_frame)
@@ -146,14 +146,14 @@ class MainWindow(QMainWindow):
         self._history_btn.clicked.connect(self._on_history_requested)
         pin_row.addWidget(self._history_btn)
 
-        # 3. Exit Button
-        self._exit_btn = QPushButton("✕", self._header_frame)
-        self._exit_btn.setObjectName("exitButton")
-        self._exit_btn.setAccessibleName("إغلاق التطبيق نهائياً")
-        self._exit_btn.setToolTip("إغلاق التطبيق نهائياً")
-        self._exit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._exit_btn.clicked.connect(self._on_exit_clicked)
-        pin_row.addWidget(self._exit_btn)
+        # 3. Settings button
+        self._settings_btn = QPushButton("⚙", self._header_frame)
+        self._settings_btn.setObjectName("headerIconButton")
+        self._settings_btn.setAccessibleName("فتح الإعدادات")
+        self._settings_btn.setToolTip("الإعدادات")
+        self._settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._settings_btn.clicked.connect(self._on_settings_requested)
+        pin_row.addWidget(self._settings_btn)
 
         # Stretch between the right-side control group and the pin
         pin_row.addStretch(1)

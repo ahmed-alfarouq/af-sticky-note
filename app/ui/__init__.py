@@ -1,1 +1,5 @@
-"""UI layer: Qt widgets and presentation only. No SQL, no business logic."""
+try:
+    from app.ui.windows.main_window import MainWindow
+    __all__ = ["MainWindow"]
+except ImportError:
+    __all__ = []

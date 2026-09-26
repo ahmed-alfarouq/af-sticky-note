@@ -4,3 +4,8 @@ __pycache__/
 *.db
 *.db-journal
 .pytest_cache/
+build/
+dist/
+*.spec.bak
+Output/
+*.iss.bak

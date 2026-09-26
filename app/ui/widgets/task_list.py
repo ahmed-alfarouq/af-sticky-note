@@ -1,0 +1,106 @@
+"""Scrollable list container for TaskItem widgets with accessibility."""
+from __future__ import annotations
+
+from typing import Dict, Optional, Sequence
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction, QContextMenuEvent
+from PySide6.QtWidgets import QFrame, QMenu, QScrollArea, QVBoxLayout, QWidget
+
+from app.core.models import Task
+from app.ui.widgets.task_item import TaskItem
+
+
+class TaskList(QScrollArea):
+    """Scrollable container managing visual TaskItem instances."""
+
+    task_completed_toggled = Signal(int, bool)  # task_id, is_completed
+    task_edit_requested = Signal(int)           # task_id
+    task_delete_requested = Signal(int)         # task_id
+    clear_completed_requested = Signal()        # emit to clear completed tasks for today
+    history_requested = Signal()                # emit to open History UI
+    settings_requested = Signal()               # emit to open Settings UI
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("taskListScroll")
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setAccessibleName("قائمة مهام اليوم")
+        self.setAccessibleDescription("عرض المهام اليومية مع إمكانية تحديد إنجازها")
+
+        self._container = QWidget(self)
+        self._container.setObjectName("taskListContainer")
+        self._layout = QVBoxLayout(self._container)
+        self._layout.setContentsMargins(0, 4, 0, 4)
+        self._layout.setSpacing(8)
+        self._layout.addStretch(1)
+
+        self.setWidget(self._container)
+        self._items: Dict[int, TaskItem] = {}
+
+    def set_tasks(self, tasks: Sequence[Task]) -> None:
+        """Clear existing items and populate with provided tasks."""
+        self.clear_tasks()
+        for task in tasks:
+            self.add_task(task)
+
+    def add_task(self, task: Task) -> None:
+        """Append a new TaskItem to the visual list."""
+        if task.id is None:
+            raise ValueError("Cannot add a task without an ID")
+
+        if task.id in self._items:
+            return
+
+        item = TaskItem(task, self._container)
+        item.completed_toggled.connect(self.task_completed_toggled.emit)
+        item.edit_requested.connect(self.task_edit_requested.emit)
+        item.delete_requested.connect(self.task_delete_requested.emit)
+
+        # Insert before the trailing stretch item
+        stretch_index = max(0, self._layout.count() - 1)
+        self._layout.insertWidget(stretch_index, item)
+        self._items[task.id] = item
+
+    def update_task_text(self, task_id: int, new_text: str) -> None:
+        """Update the text of a specific task item."""
+        item = self._items.get(task_id)
+        if item is not None:
+            item.update_task_text(new_text)
+
+    def remove_task(self, task_id: int) -> None:
+        """Remove a TaskItem from the visual list."""
+        item = self._items.pop(task_id, None)
+        if item is not None:
+            self._layout.removeWidget(item)
+            item.deleteLater()
+
+    def clear_tasks(self) -> None:
+        """Remove all task items."""
+        for item in self._items.values():
+            self._layout.removeWidget(item)
+            item.deleteLater()
+        self._items.clear()
+
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
+        """Show list context menu offering 'Open History', 'Settings', and 'Clear completed'."""
+        menu = QMenu(self)
+        menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+
+        history_action = QAction("فتح السجل", menu)
+        history_action.triggered.connect(self.history_requested.emit)
+        menu.addAction(history_action)
+
+        settings_action = QAction("الإعدادات", menu)
+        settings_action.triggered.connect(self.settings_requested.emit)
+        menu.addAction(settings_action)
+
+        menu.addSeparator()
+
+        clear_action = QAction("حذف المهام المكتملة", menu)
+        clear_action.triggered.connect(self.clear_completed_requested.emit)
+        menu.addAction(clear_action)
+
+        menu.exec(event.globalPos())
+        event.accept()

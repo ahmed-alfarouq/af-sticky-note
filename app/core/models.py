@@ -2,7 +2,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Optional
+
+
+class TaskPriority(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
 
 
 @dataclass(frozen=True)
@@ -14,6 +21,8 @@ class Task:
     position: int
     created_at: str
     updated_at: str
+    priority: TaskPriority = TaskPriority.MEDIUM
+    source_task_id: Optional[int] = None
 
 
 @dataclass(frozen=True)

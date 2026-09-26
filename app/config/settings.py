@@ -7,3 +7,5 @@ platform layers exist (later phases).
 
 APP_NAME = "Daily Sticky"
 ORG_NAME = "DailySticky"
+APP_VERSION = "0.5.0"
+APP_DESCRIPTION = "ملاحظة لاصقة يومية بسيطة لسطح المكتب"

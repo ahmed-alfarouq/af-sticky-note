@@ -72,6 +72,32 @@ def get_application_stylesheet() -> str:
         max-height: 16px;
     }}
 
+    /* Top-Left Exit Button */
+    QPushButton#exitButton {{
+        background-color: transparent;
+        color: {COLOR_TEXT_SECONDARY};
+        border: none;
+        border-radius: 4px;
+        font-family: Arial, sans-serif;
+        font-size: 13px;
+        font-weight: bold;
+        min-width: 22px;
+        max-width: 22px;
+        min-height: 22px;
+        max-height: 22px;
+        padding: 0px;
+    }}
+
+    QPushButton#exitButton:hover {{
+        background-color: rgba(235, 87, 87, 0.2);
+        color: #FF6B6B;
+    }}
+
+    QPushButton#exitButton:pressed {{
+        background-color: rgba(235, 87, 87, 0.4);
+        color: #FFA8A8;
+    }}
+
     /* Header / Date - Bright, high-contrast, perfectly visible */
     QLabel#dateLabel {{
         color: #7EB2E6;

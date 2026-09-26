@@ -100,12 +100,17 @@ def bootstrap_application(app: QApplication) -> MainWindow:
     history_service = HistoryService(day_repo=day_repo, task_repo=task_repo)
 
     # 4. Create MainWindow (restores saved geometry automatically)
+    def _on_app_exit_requested() -> None:
+        window._allow_window_close = True
+        app.quit()
+
     window = MainWindow(
         day=day,
         quote_text=quote_text,
         task_service=task_service,
         initial_tasks=initial_tasks,
         history_service=history_service,
+        on_exit_requested=_on_app_exit_requested,
     )
 
     # 5. Resolve platform adapter and attach to desktop layer if supported
@@ -114,10 +119,6 @@ def bootstrap_application(app: QApplication) -> MainWindow:
 
     # Initialize system tray if on Windows adapter
     from app.platform.windows.tray import WindowsSystemTrayController
-
-    def _on_app_exit_requested() -> None:
-        window._allow_window_close = True
-        app.quit()
 
     if platform_adapter.name == "windows":
         # Wire MainWindow into the tray controller

@@ -7,7 +7,7 @@ descriptions, RTL alignment, and keyboard navigation.
 from __future__ import annotations
 
 import logging
-from typing import Optional, Sequence
+from typing import Callable, Optional, Sequence
 
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QMouseEvent
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -43,6 +44,7 @@ class MainWindow(QMainWindow):
         initial_tasks: Sequence[Task] = (),
         geometry_manager: Optional[WindowGeometryManager] = None,
         history_service: Optional[object] = None,
+        on_exit_requested: Optional[Callable[[], None]] = None,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
@@ -50,6 +52,7 @@ class MainWindow(QMainWindow):
         self._task_service = task_service
         self._geometry_manager = geometry_manager or WindowGeometryManager()
         self._history_service = history_service
+        self._on_exit_requested = on_exit_requested
 
         # Dragging state
         self._is_dragging: bool = False
@@ -112,19 +115,39 @@ class MainWindow(QMainWindow):
         paper_layout.setContentsMargins(16, 12, 16, 16)
         paper_layout.setSpacing(12)
 
-        # 1. Decorative Pin Header (Designated Drag Area)
+        # 1. Decorative Pin Header (Designated Drag Area) with Top-Left Exit Button
         self._header_frame = QFrame(self._paper_frame)
         self._header_frame.setObjectName("headerFrame")
         self._header_frame.setCursor(Qt.CursorShape.ArrowCursor)
+
+        # Explicit LeftToRight header layout so Exit is permanently anchored physically on the LEFT
         pin_row = QHBoxLayout(self._header_frame)
+        pin_row.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         pin_row.setContentsMargins(0, 0, 0, 4)
+
+        # Top-Left Exit Button (Physically on the left)
+        self._exit_btn = QPushButton("✕", self._header_frame)
+        self._exit_btn.setObjectName("exitButton")
+        self._exit_btn.setAccessibleName("إغلاق التطبيق نهائياً")
+        self._exit_btn.setToolTip("إغلاق التطبيق نهائياً")
+        self._exit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._exit_btn.clicked.connect(self._on_exit_clicked)
+        pin_row.addWidget(self._exit_btn)
+
+        # Left stretch to keep pin centered
         pin_row.addStretch(1)
 
+        # Decorative Pin Widget in Center
         self._pin_widget = QLabel(self._header_frame)
         self._pin_widget.setObjectName("pinWidget")
         self._pin_widget.setAccessibleName("دبوس تثبيت الملاحظة")
         pin_row.addWidget(self._pin_widget)
+
+        # Right stretch to balance the row (equal to left stretch + width compensation)
         pin_row.addStretch(1)
+
+        # Symmetrical spacer matching exit button width (22px) so the pin remains perfectly centered
+        pin_row.addSpacing(22)
 
         paper_layout.addWidget(self._header_frame)
 
@@ -239,6 +262,19 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             logger.error("Failed to open History window: %s", exc)
 
+    def _on_exit_clicked(self) -> None:
+        """Handle top-left exit control click.
+
+        Triggers canonical application shutdown through the registered exit path.
+        """
+        logger.info("Top-left Exit button clicked; initiating application shutdown.")
+        self._allow_window_close = True
+        if self._on_exit_requested is not None:
+            self._on_exit_requested()
+        else:
+            # Fallback to direct window close / app quit
+            self.close()
+
     # -------------------------------------------------------------------------
     # Dragging & Resizing Event Handlers (Phase 5G-A)
     # -------------------------------------------------------------------------
@@ -293,11 +329,15 @@ class MainWindow(QMainWindow):
                 event.accept()
                 return
 
-            # Check if clicked inside header drag area
+            # Check if clicked inside header drag area (excluding child widgets like the exit button)
             if hasattr(self, "_header_frame"):
                 header_rect = self._header_frame.rect()
                 local_pos = self._header_frame.mapFromGlobal(global_pos)
                 if header_rect.contains(local_pos):
+                    # If clicked specifically on the exit button or its children, allow button to handle click
+                    if hasattr(self, "_exit_btn") and self._exit_btn.geometry().contains(local_pos):
+                        super().mousePressEvent(event)
+                        return
                     self._is_dragging = True
                     self._drag_start_pos = global_pos - self.frameGeometry().topLeft()
                     event.accept()

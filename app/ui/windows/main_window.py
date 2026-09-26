@@ -119,10 +119,10 @@ class MainWindow(QMainWindow):
         self._header_frame = QFrame(self._paper_frame)
         self._header_frame.setObjectName("headerFrame")
         self._header_frame.setCursor(Qt.CursorShape.ArrowCursor)
+        # Set layout direction on the QFrame widget (QWidget API), NOT on the QLayout
+        self._header_frame.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
 
-        # Explicit LeftToRight header layout so Exit is permanently anchored physically on the LEFT
         pin_row = QHBoxLayout(self._header_frame)
-        pin_row.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         pin_row.setContentsMargins(0, 0, 0, 4)
 
         # Top-Left Exit Button (Physically on the left)

@@ -42,12 +42,14 @@ class MainWindow(QMainWindow):
         task_service: TaskService,
         initial_tasks: Sequence[Task] = (),
         geometry_manager: Optional[WindowGeometryManager] = None,
+        history_service: Optional[object] = None,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
         self._day = day
         self._task_service = task_service
         self._geometry_manager = geometry_manager or WindowGeometryManager()
+        self._history_service = history_service
 
         # Dragging state
         self._is_dragging: bool = False
@@ -136,6 +138,7 @@ class MainWindow(QMainWindow):
         self._task_list.task_edit_requested.connect(self._on_task_edit_requested)
         self._task_list.task_delete_requested.connect(self._on_task_delete_requested)
         self._task_list.clear_completed_requested.connect(self._on_clear_completed_requested)
+        self._task_list.history_requested.connect(self._on_history_requested)
         self._task_list.set_tasks(initial_tasks)
         paper_layout.addWidget(self._task_list, 1)
 
@@ -219,6 +222,22 @@ class MainWindow(QMainWindow):
             self._task_list.set_tasks(remaining_tasks)
         except Exception as exc:
             logger.error("Failed to clear completed tasks for day %d: %s", self._day.id, exc)
+
+    def _on_history_requested(self) -> None:
+        """Open the read-only History viewer window."""
+        if self._history_service is None:
+            logger.warning("HistoryService not configured on MainWindow")
+            return
+        try:
+            from app.ui.windows.history_window import HistoryWindow
+            history_win = HistoryWindow(
+                history_service=self._history_service,
+                initial_date=self._day.date,
+                parent=self,
+            )
+            history_win.exec()
+        except Exception as exc:
+            logger.error("Failed to open History window: %s", exc)
 
     # -------------------------------------------------------------------------
     # Dragging & Resizing Event Handlers (Phase 5G-A)

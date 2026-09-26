@@ -50,6 +50,11 @@ class DayRepository:
         assert updated_day is not None, f"Day {day_id} vanished immediately after its own update"
         return updated_day
 
+    def list_all_dates_desc(self) -> list[str]:
+        """Return all recorded calendar dates in descending order (newest first)."""
+        rows = self._conn.execute("SELECT date FROM days ORDER BY date DESC").fetchall()
+        return [row["date"] for row in rows]
+
     @staticmethod
     def _row_to_day(row: sqlite3.Row) -> Day:
         return Day(

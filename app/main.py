@@ -92,9 +92,12 @@ def bootstrap_application(app: QApplication) -> MainWindow:
         day = day_repo.get_or_create(today_str)
         quote_text = "لا توجد حكمة متاحة لهذا اليوم"
 
-    # 3. Load today's initial tasks
+    # 3. Load today's initial tasks and initialize HistoryService
     assert day.id is not None, "Day id is always populated after database retrieval/creation"
     initial_tasks = task_service.get_today_tasks(day.id)
+
+    from app.core.services.history_service import HistoryService
+    history_service = HistoryService(day_repo=day_repo, task_repo=task_repo)
 
     # 4. Create MainWindow (restores saved geometry automatically)
     window = MainWindow(
@@ -102,6 +105,7 @@ def bootstrap_application(app: QApplication) -> MainWindow:
         quote_text=quote_text,
         task_service=task_service,
         initial_tasks=initial_tasks,
+        history_service=history_service,
     )
 
     # 5. Resolve platform adapter and attach to desktop layer if supported

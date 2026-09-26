@@ -18,6 +18,7 @@ class TaskList(QScrollArea):
     task_edit_requested = Signal(int)           # task_id
     task_delete_requested = Signal(int)         # task_id
     clear_completed_requested = Signal()        # emit to clear completed tasks for today
+    history_requested = Signal()                # emit to open History UI
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -82,9 +83,15 @@ class TaskList(QScrollArea):
         self._items.clear()
 
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
-        """Show list context menu offering 'Clear completed'."""
+        """Show list context menu offering 'Clear completed' and 'Open History'."""
         menu = QMenu(self)
         menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+
+        history_action = QAction("فتح السجل", menu)
+        history_action.triggered.connect(self.history_requested.emit)
+        menu.addAction(history_action)
+
+        menu.addSeparator()
 
         clear_action = QAction("حذف المهام المكتملة", menu)
         clear_action.triggered.connect(self.clear_completed_requested.emit)

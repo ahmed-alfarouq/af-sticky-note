@@ -18,7 +18,7 @@ from app.platform.windows.startup import get_default_executable_command
 def test_version_and_metadata_configured():
     """Verify application version and name are properly defined."""
     assert APP_NAME == "Daily Sticky"
-    assert APP_VERSION == "0.5.0"
+    assert APP_VERSION == "0.5.1"
 
 
 def test_resource_paths_point_to_valid_files():

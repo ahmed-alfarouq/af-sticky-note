@@ -3,7 +3,7 @@
 # 📌 Daily Sticky
 ### ملاحظتك اليومية الذكية على سطح المكتب
 
-**الإصدار 0.5.0**
+**الإصدار 0.5.1**
 
 تطبيق سطح مكتب هادئ لا يفرض نفسه على مساحة عملك. تعيش الملاحظة خلف نوافذك، بلا ضجيج في شريط المهام، وتنظّم يومك بذكاء دون أن تطلب منك شيئًا.
 
@@ -90,7 +90,7 @@ powershell -ExecutionPolicy Bypass -File packaging/build_windows.ps1
 <table dir="rtl" style="width:100%; margin: 16px 0;">
 <tr><th align="right">العنصر</th><th align="right">المسار</th></tr>
 <tr><td align="right">النسخة التنفيذية</td><td align="right"><code>dist/DailySticky/DailySticky.exe</code></td></tr>
-<tr><td align="right">ملف التثبيت</td><td align="right"><code>dist/installer/DailySticky-Setup-0.5.0.exe</code></td></tr>
+<tr><td align="right">ملف التثبيت</td><td align="right"><code>dist/installer/DailySticky-Setup-0.5.1.exe</code></td></tr>
 </table>
 
 <br clear="both">

@@ -4,7 +4,7 @@
 ; and implements the installer-owned default startup registration.
 
 #define MyAppName "Daily Sticky"
-#define MyAppVersion "0.5.0"
+#define MyAppVersion "0.5.1"
 #define MyAppPublisher "Daily Sticky Project"
 #define MyAppExeName "DailySticky.exe"
 

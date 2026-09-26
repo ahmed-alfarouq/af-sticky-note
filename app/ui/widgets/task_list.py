@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QContextMenuEvent
 from PySide6.QtWidgets import QFrame, QMenu, QScrollArea, QVBoxLayout, QWidget
 
-from app.core.models import Task
+from app.core.models import Task, TaskPriority
 from app.ui.widgets.task_item import TaskItem
 
 
@@ -17,6 +17,7 @@ class TaskList(QScrollArea):
     task_completed_toggled = Signal(int, bool)  # task_id, is_completed
     task_edit_requested = Signal(int)           # task_id
     task_delete_requested = Signal(int)         # task_id
+    task_priority_change_requested = Signal(int, str)  # task_id, TaskPriority value
     clear_completed_requested = Signal()        # emit to clear completed tasks for today
     history_requested = Signal()                # emit to open History UI
     settings_requested = Signal()               # emit to open Settings UI
@@ -26,13 +27,15 @@ class TaskList(QScrollArea):
         self.setObjectName("taskListScroll")
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setAccessibleName("قائمة مهام اليوم")
         self.setAccessibleDescription("عرض المهام اليومية مع إمكانية تحديد إنجازها")
 
         self._container = QWidget(self)
         self._container.setObjectName("taskListContainer")
+        self._container.setMinimumWidth(0)
         self._layout = QVBoxLayout(self._container)
-        self._layout.setContentsMargins(0, 4, 0, 4)
+        self._layout.setContentsMargins(0, 2, 0, 0)
         self._layout.setSpacing(8)
         self._layout.addStretch(1)
 
@@ -57,6 +60,7 @@ class TaskList(QScrollArea):
         item.completed_toggled.connect(self.task_completed_toggled.emit)
         item.edit_requested.connect(self.task_edit_requested.emit)
         item.delete_requested.connect(self.task_delete_requested.emit)
+        item.priority_change_requested.connect(self.task_priority_change_requested.emit)
 
         # Insert before the trailing stretch item
         stretch_index = max(0, self._layout.count() - 1)
@@ -68,6 +72,26 @@ class TaskList(QScrollArea):
         item = self._items.get(task_id)
         if item is not None:
             item.update_task_text(new_text)
+
+    def update_task_priority(self, task_id: int, priority: TaskPriority) -> None:
+        """Update the priority badge of a specific task item. Does not recreate it."""
+        item = self._items.get(task_id)
+        if item is not None:
+            item.set_priority(priority)
+
+    def task_text(self, task_id: int) -> Optional[str]:
+        """Return the visible text for a task, or None if it is not in the list."""
+        item = self._items.get(task_id)
+        if item is None:
+            return None
+        return item.text()
+
+    def task_priority(self, task_id: int) -> Optional[TaskPriority]:
+        """Return the visible priority for a task, or None if it is not in the list."""
+        item = self._items.get(task_id)
+        if item is None:
+            return None
+        return item.priority()
 
     def remove_task(self, task_id: int) -> None:
         """Remove a TaskItem from the visual list."""

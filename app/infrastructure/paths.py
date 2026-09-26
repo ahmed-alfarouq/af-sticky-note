@@ -20,7 +20,7 @@ def get_bundle_dir() -> Path:
     - Under source development: project repository root.
     """
     if hasattr(sys, "_MEIPASS"):
-        return Path(sys._MEIPASS)
+        return Path(getattr(sys, "_MEIPASS"))
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent.parent.parent

@@ -15,6 +15,7 @@ repo_root = Path(SPECPATH).resolve().parent if Path(SPECPATH).name == "packaging
 
 # Bundled read-only resources
 datas = [
+    (str(repo_root / "assets" / "logo.png"), "assets"),
     (str(repo_root / "data" / "quotes.txt"), "data"),
     (str(repo_root / "fonts" / "thmanyah"), "fonts/thmanyah"),
     (str(repo_root / "app" / "database" / "migrations"), "app/database/migrations"),

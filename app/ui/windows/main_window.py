@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from app.config.settings import APP_NAME
 from app.core.models import Day, Task
 from app.core.services.task_service import TaskService
+from app.infrastructure.paths import get_logo_path
 from app.ui.geometry_manager import WindowGeometryManager
 from app.ui.styles.app_style import get_application_stylesheet
 from app.ui.widgets.quote_widget import QuoteWidget
@@ -81,6 +82,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(APP_NAME)
         self.setMinimumSize(320, 420)
         self.setAccessibleName("نافذة الملاحظة اليومية دايلي ستيكي")
+
+        # Set application window icon from bundled logo if present
+        try:
+            logo_path = get_logo_path()
+            if logo_path.exists() and logo_path.is_file():
+                self.setWindowIcon(QIcon(str(logo_path)))
+        except Exception:
+            pass
 
         self._central_widget = QWidget(self)
         self._central_widget.setObjectName("centralWidget")

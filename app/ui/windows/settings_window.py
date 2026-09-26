@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.config.settings import APP_NAME
+from app.infrastructure.paths import get_logo_path
 from app.platform.interfaces import StartupManager
 from app.ui.styles.app_style import get_application_stylesheet
 
@@ -42,6 +44,15 @@ class SettingsWindow(QDialog):
         self.resize(360, 240)
         self.setMinimumSize(320, 200)
 
+        # Set dialog window icon from bundled logo if present
+        try:
+            from PySide6.QtGui import QIcon
+            logo_path = get_logo_path()
+            if logo_path.exists() and logo_path.is_file():
+                self.setWindowIcon(QIcon(str(logo_path)))
+        except Exception:
+            pass
+
         self._init_ui()
         self.setStyleSheet(get_application_stylesheet())
         self._load_current_settings()
@@ -51,10 +62,38 @@ class SettingsWindow(QDialog):
         main_layout.setContentsMargins(18, 18, 18, 18)
         main_layout.setSpacing(14)
 
-        # 1. Section Header: عام (General)
-        section_label = QLabel("عام", self)
-        section_label.setObjectName("dateLabel")
-        main_layout.addWidget(section_label)
+        # 1. Branding Header: Logo + App Name
+        branding_row = QHBoxLayout()
+        branding_row.setSpacing(10)
+
+        # Attempt to load logo image
+        try:
+            from PySide6.QtGui import QPixmap
+            logo_path = get_logo_path()
+            if logo_path.exists() and logo_path.is_file():
+                logo_label = QLabel(self)
+                logo_label.setObjectName("settingsAppLogo")
+                logo_label.setAccessibleName("شعار الملاحظة اليومية")
+                pixmap = QPixmap(str(logo_path))
+                if not pixmap.isNull():
+                    # Scale cleanly maintaining aspect ratio to compact header size (36x36)
+                    scaled_pix = pixmap.scaled(
+                        36, 36,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                    logo_label.setPixmap(scaled_pix)
+                    branding_row.addWidget(logo_label)
+        except Exception:
+            pass
+
+        title_label = QLabel(APP_NAME, self)
+        title_label.setObjectName("dateLabel")
+        title_label.setAccessibleName("اسم التطبيق")
+        branding_row.addWidget(title_label)
+        branding_row.addStretch(1)
+
+        main_layout.addLayout(branding_row)
 
         # 2. General Settings Card Container
         settings_card = QFrame(self)

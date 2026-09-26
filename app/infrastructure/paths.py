@@ -53,3 +53,9 @@ def get_quotes_path() -> Path:
 def get_fonts_dir() -> Path:
     """Return the path to the bundled fonts directory."""
     return get_bundle_dir() / "fonts" / "thmanyah"
+
+
+def get_logo_path() -> Path:
+    """Return the path to the bundled application logo image."""
+    return get_bundle_dir() / "assets" / "logo.png"
+

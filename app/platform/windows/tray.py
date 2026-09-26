@@ -25,9 +25,29 @@ except ImportError:
     QWidget = None  # type: ignore
 
 from app.config.settings import APP_NAME
+from app.infrastructure.paths import get_logo_path
 from app.platform.interfaces import SystemTrayController
 
 logger = logging.getLogger(__name__)
+
+
+def _load_tray_icon() -> Optional[QIcon]:
+    """Load application logo as tray icon, falling back to synthesized icon if missing."""
+    if QIcon is None:
+        return None
+
+    # 1. Prefer the official bundled logo asset
+    try:
+        logo_path = get_logo_path()
+        if logo_path.exists() and logo_path.is_file():
+            icon = QIcon(str(logo_path))
+            if not icon.isNull():
+                return icon
+    except Exception as exc:
+        logger.debug("Could not load logo from %s: %s", get_logo_path(), exc)
+
+    # 2. Fall back to synthesized sticky-note vector icon
+    return _create_fallback_tray_icon()
 
 
 def _create_fallback_tray_icon() -> Optional[QIcon]:
@@ -82,7 +102,7 @@ class WindowsSystemTrayController(SystemTrayController):
             logger.info("QSystemTrayIcon is not available in the current environment.")
             return
 
-        icon = _create_fallback_tray_icon()
+        icon = _load_tray_icon()
         if icon is None:
             icon = QIcon()
 

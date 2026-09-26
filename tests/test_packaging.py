@@ -22,7 +22,7 @@ def test_version_and_metadata_configured():
 
 
 def test_resource_paths_point_to_valid_files():
-    """Verify quotes file and fonts directory resolve correctly in dev environment."""
+    """Verify quotes file, fonts directory, and logo resolve correctly in dev environment."""
     quotes_file = get_quotes_path()
     assert quotes_file.exists()
     assert quotes_file.is_file()
@@ -30,6 +30,12 @@ def test_resource_paths_point_to_valid_files():
     fonts_dir = get_fonts_dir()
     assert fonts_dir.exists()
     assert fonts_dir.is_dir()
+
+    from app.infrastructure.paths import get_logo_path
+    logo_file = get_logo_path()
+    assert logo_file.exists()
+    assert logo_file.is_file()
+    assert logo_file.name == "logo.png"
 
 
 def test_bundle_dir_meipass_override():

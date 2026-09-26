@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from app.core.models import Task
 from app.core.services.history_service import DayHistoryView, HistoryService
 from app.infrastructure.clock import format_dual_calendar_date
+from app.infrastructure.paths import get_logo_path
 from app.ui.styles.app_style import get_application_stylesheet
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,15 @@ class HistoryWindow(QDialog):
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.resize(380, 520)
         self.setMinimumSize(340, 460)
+
+        # Set dialog window icon from bundled logo if present
+        try:
+            from PySide6.QtGui import QIcon
+            logo_path = get_logo_path()
+            if logo_path.exists() and logo_path.is_file():
+                self.setWindowIcon(QIcon(str(logo_path)))
+        except Exception:
+            pass
 
         self._init_ui()
         self.setStyleSheet(get_application_stylesheet())

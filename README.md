@@ -29,7 +29,7 @@
 <tr><td style="padding: 13px 0;"><b>تفاعل غني مع المهام</b></td><td style="padding: 13px 0;">قائمة سياقية (Context Menu) بزر الفأرة الأيمن للتعديل والحذف وتنظيف المهام المنجزة، مع تمييز بصري واضح للأولويات</td></tr>
 <tr><td style="padding: 13px 0;"><b>History</b></td><td style="padding: 13px 0;">نافذة مخصّصة لاستعراض أرشيف الأيام ونسب الإنجاز، للقراءة فقط وبدون تدخّل عرضي في البيانات القديمة</td></tr>
 <tr><td style="padding: 13px 0;"><b>Geometry Persistence</b></td><td style="padding: 13px 0;">تتذكّر الملاحظة مكانها وأبعادها وتستعيدهما بأمان، حتى في إعدادات الشاشات المتعددة</td></tr>
-<tr><td style="padding: 13px 0;"><b>System Tray</b></td><td style="padding: 13px 0;">تحكّم كامل بإظهار الملاحظة وإخفائها من الـ Tray، مع زر خروج علوي يسار لإنهاء التطبيق بالكامل</td></tr>
+<tr><td style="padding: 13px 0;"><b>System Tray</b></td><td style="padding: 13px 0;">تحكّم كامل بإظهار الملاحظة وإخفائها من الـ Tray، مع أدوات تحكم علوية تشمل الإعدادات والسجل والخروج لإنهاء التطبيق بالكامل</td></tr>
 <tr><td style="padding: 13px 0;"><b>Windows Startup</b></td><td style="padding: 13px 0;">خيار اختياري لتشغيل التطبيق عند بدء ويندوز، عبر الـ Registry ودون الحاجة لصلاحيات Admin</td></tr>
 </table>
 

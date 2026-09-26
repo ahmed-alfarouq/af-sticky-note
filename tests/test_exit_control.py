@@ -111,14 +111,14 @@ def test_main_window_header_action_buttons_exist_and_wired():
 
         assert hasattr(window, "_history_btn")
         assert window._history_btn is not None
-        assert window._history_btn.text() == "⏱"
+        assert window._history_btn.text() == "📄"
 
         assert hasattr(window, "_exit_btn")
         assert window._exit_btn is not None
         assert window._exit_btn.text() == "✕"
 
-        # Verify layout direction is LeftToRight (anchoring buttons physically to the left)
-        assert window._header_frame.layoutDirection() == Qt.LayoutDirection.LeftToRight
+        # Verify layout direction is RightToLeft (anchoring buttons to the right side in RTL)
+        assert window._header_frame.layoutDirection() == Qt.LayoutDirection.RightToLeft
     except (ImportError, Exception):
         pass
 
@@ -145,9 +145,9 @@ def test_main_window_exit_control_invokes_shared_shutdown():
         assert hasattr(window, "_exit_btn")
         assert window._exit_btn is not None
         assert hasattr(window, "_header_frame")
-        # Verify _header_frame has LeftToRight layout direction
+        # Verify _header_frame has RightToLeft layout direction
         from PySide6.QtCore import Qt
-        assert window._header_frame.layoutDirection() == Qt.LayoutDirection.LeftToRight
+        assert window._header_frame.layoutDirection() == Qt.LayoutDirection.RightToLeft
 
         # Trigger exit action
         window._on_exit_clicked()

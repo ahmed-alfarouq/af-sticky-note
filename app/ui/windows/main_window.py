@@ -118,18 +118,16 @@ class MainWindow(QMainWindow):
         paper_layout.setContentsMargins(16, 12, 16, 16)
         paper_layout.setSpacing(12)
 
-        # 1. Decorative Pin Header (Designated Drag Area) with Top-Left Control Icons
+        # 1. Decorative Pin Header (Designated Drag Area) with Right-Side Control Icons
         self._header_frame = QFrame(self._paper_frame)
         self._header_frame.setObjectName("headerFrame")
         self._header_frame.setCursor(Qt.CursorShape.ArrowCursor)
-        # Set layout direction on the QFrame widget (QWidget API), NOT on the QLayout
-        self._header_frame.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
 
         pin_row = QHBoxLayout(self._header_frame)
         pin_row.setContentsMargins(0, 0, 0, 4)
         pin_row.setSpacing(4)
 
-        # Top-Left Action Buttons (Physically on the left: Settings | History | Exit)
+        # Right-side Action Buttons (Settings | History | Exit in RTL: Settings is leftmost of group, Exit is rightmost)
         # 1. Settings button
         self._settings_btn = QPushButton("⚙", self._header_frame)
         self._settings_btn.setObjectName("headerIconButton")
@@ -139,8 +137,8 @@ class MainWindow(QMainWindow):
         self._settings_btn.clicked.connect(self._on_settings_requested)
         pin_row.addWidget(self._settings_btn)
 
-        # 2. History button
-        self._history_btn = QPushButton("⏱", self._header_frame)
+        # 2. History button (paper/document record icon)
+        self._history_btn = QPushButton("📄", self._header_frame)
         self._history_btn.setObjectName("headerIconButton")
         self._history_btn.setAccessibleName("فتح السجل اليومي")
         self._history_btn.setToolTip("السجل")
@@ -157,7 +155,7 @@ class MainWindow(QMainWindow):
         self._exit_btn.clicked.connect(self._on_exit_clicked)
         pin_row.addWidget(self._exit_btn)
 
-        # Left stretch to keep pin centered
+        # Stretch between the right-side control group and the pin
         pin_row.addStretch(1)
 
         # Decorative Pin Widget in Center
@@ -166,10 +164,10 @@ class MainWindow(QMainWindow):
         self._pin_widget.setAccessibleName("دبوس تثبيت الملاحظة")
         pin_row.addWidget(self._pin_widget)
 
-        # Right stretch to balance the row
+        # Left stretch to balance the row
         pin_row.addStretch(1)
 
-        # Symmetrical spacer matching controls group width (22*3 + 4*2 = 74px) so the pin remains perfectly centered
+        # Symmetrical spacer matching controls group width (22*3 + 4*2 = 74px) so the pin remains centered
         pin_row.addSpacing(74)
 
         paper_layout.addWidget(self._header_frame)

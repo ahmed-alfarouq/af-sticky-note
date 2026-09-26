@@ -35,8 +35,6 @@ class TaskInput(QWidget):
 
         self._line_edit = QLineEdit(self)
         self._line_edit.setObjectName("taskInputField")
-        self._line_edit.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-        self._line_edit.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         # Physical right padding. Not mirrored by stylesheet RTL.
         self._line_edit.setTextMargins(12, 0, 14, 0)
         self._line_edit.setPlaceholderText("اكتب مهمة جديدة...")

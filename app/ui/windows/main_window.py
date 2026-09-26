@@ -7,8 +7,8 @@ descriptions, RTL alignment, and keyboard navigation.
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional, Sequence
-
+from typing import Any, Callable, Optional, Protocol, Sequence, cast
+from PySide6.QtGui import QIcon
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from app.config.settings import APP_NAME
 from app.core.models import Day, Task, TaskPriority
+from app.core.services.history_service import HistoryService
 from app.core.services.task_service import TaskService
 from app.infrastructure.paths import get_logo_path
 from app.ui.geometry_manager import WindowGeometryManager
@@ -41,6 +42,16 @@ from app.ui.widgets.task_list import TaskList
 logger = logging.getLogger(__name__)
 
 
+class StartupManager(Protocol):
+    """Protocol required by the Settings window."""
+
+    def is_enabled(self) -> bool: ...
+
+    def enable(self) -> None: ...
+
+    def disable(self) -> None: ...
+
+
 class MainWindow(QMainWindow):
     """Sticky Note main window coordinating the daily quote and tasks."""
 
@@ -51,8 +62,8 @@ class MainWindow(QMainWindow):
         task_service: TaskService,
         initial_tasks: Sequence[Task] = (),
         geometry_manager: Optional[WindowGeometryManager] = None,
-        history_service: Optional[object] = None,
-        startup_manager: Optional[object] = None,
+        history_service: Optional[HistoryService] = None,
+        startup_manager: Optional[StartupManager] = None,
         on_exit_requested: Optional[Callable[[], None]] = None,
         parent: Optional[QWidget] = None,
     ) -> None:
@@ -139,14 +150,10 @@ class MainWindow(QMainWindow):
         )
         paper_layout.setSpacing(PAPER_SPACING)
 
-        # 1. Header. Physical LeftToRight so Exit stays top-left even when
-        # the application direction is RTL. Arabic content direction does
-        # not move architectural controls.
+        # 1. Header.
         self._header_frame = QFrame(self._paper_frame)
         self._header_frame.setObjectName("headerFrame")
-        self._header_frame.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         self._header_frame.setCursor(Qt.CursorShape.ArrowCursor)
-
         pin_row = QHBoxLayout(self._header_frame)
         pin_row.setContentsMargins(0, 0, 0, 4)
         pin_row.setSpacing(4)
@@ -372,7 +379,7 @@ class MainWindow(QMainWindow):
         try:
             from app.ui.windows.settings_window import SettingsWindow
             settings_dialog = SettingsWindow(
-                startup_manager=self._startup_manager,
+                startup_manager=cast(Any, self._startup_manager),
                 parent=self,
             )
             settings_dialog.exec()

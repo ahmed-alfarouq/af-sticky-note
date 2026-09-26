@@ -9,6 +9,7 @@ from typing import Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QBoxLayout,
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -35,7 +36,6 @@ class TaskEditDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("taskEditDialog")
         self.setWindowTitle("تعديل المهمة")
-        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setModal(True)
         self.setMinimumWidth(340)
         self.setStyleSheet(get_application_stylesheet())
@@ -50,8 +50,6 @@ class TaskEditDialog(QDialog):
 
         self._input_field = QLineEdit(self)
         self._input_field.setObjectName("taskInputField")
-        self._input_field.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-        self._input_field.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._input_field.setTextMargins(12, 0, 14, 0)
         self._input_field.setText(initial_text)
         self._input_field.setAccessibleName("نص المهمة")
@@ -72,7 +70,7 @@ class TaskEditDialog(QDialog):
 
         button_row = QHBoxLayout()
         button_row.setSpacing(8)
-
+        button_row.setDirection(QBoxLayout.Direction.RightToLeft)
         self._save_btn = QPushButton("حفظ", self)
         self._save_btn.setObjectName("saveButton")
         self._save_btn.setDefault(True)

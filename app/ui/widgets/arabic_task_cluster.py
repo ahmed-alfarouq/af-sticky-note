@@ -28,7 +28,6 @@ class ArabicTaskCluster(QWidget):
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
-        self.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         self.setMinimumWidth(0)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         self._target = 80

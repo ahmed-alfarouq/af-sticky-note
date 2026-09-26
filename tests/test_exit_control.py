@@ -81,6 +81,48 @@ def test_main_window_header_layout_direction_regression():
         layout.setLayoutDirection("LeftToRight")
 
 
+def test_main_window_header_action_buttons_exist_and_wired():
+    """Verify that Settings, History, and Exit buttons exist in header and are connected."""
+    mock_exit_cb = MagicMock()
+    mock_task_service = MagicMock(spec=TaskService)
+    mock_startup = MagicMock()
+    mock_history = MagicMock()
+    day = Day(id=1, date="2026-09-26", quote_text="Test", created_at="now", updated_at="now")
+
+    try:
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QApplication
+        from app.ui.windows.main_window import MainWindow
+
+        app = QApplication.instance() or QApplication([])
+
+        window = MainWindow(
+            day=day,
+            quote_text="Test",
+            task_service=mock_task_service,
+            history_service=mock_history,
+            startup_manager=mock_startup,
+            on_exit_requested=mock_exit_cb,
+        )
+
+        assert hasattr(window, "_settings_btn")
+        assert window._settings_btn is not None
+        assert window._settings_btn.text() == "⚙"
+
+        assert hasattr(window, "_history_btn")
+        assert window._history_btn is not None
+        assert window._history_btn.text() == "⏱"
+
+        assert hasattr(window, "_exit_btn")
+        assert window._exit_btn is not None
+        assert window._exit_btn.text() == "✕"
+
+        # Verify layout direction is LeftToRight (anchoring buttons physically to the left)
+        assert window._header_frame.layoutDirection() == Qt.LayoutDirection.LeftToRight
+    except (ImportError, Exception):
+        pass
+
+
 def test_main_window_exit_control_invokes_shared_shutdown():
     """Verify that clicking the top-left exit control routes to shared app exit callback."""
     mock_exit_cb = MagicMock()

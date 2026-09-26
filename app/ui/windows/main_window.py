@@ -118,7 +118,7 @@ class MainWindow(QMainWindow):
         paper_layout.setContentsMargins(16, 12, 16, 16)
         paper_layout.setSpacing(12)
 
-        # 1. Decorative Pin Header (Designated Drag Area) with Top-Left Exit Button
+        # 1. Decorative Pin Header (Designated Drag Area) with Top-Left Control Icons
         self._header_frame = QFrame(self._paper_frame)
         self._header_frame.setObjectName("headerFrame")
         self._header_frame.setCursor(Qt.CursorShape.ArrowCursor)
@@ -127,8 +127,28 @@ class MainWindow(QMainWindow):
 
         pin_row = QHBoxLayout(self._header_frame)
         pin_row.setContentsMargins(0, 0, 0, 4)
+        pin_row.setSpacing(4)
 
-        # Top-Left Exit Button (Physically on the left)
+        # Top-Left Action Buttons (Physically on the left: Settings | History | Exit)
+        # 1. Settings button
+        self._settings_btn = QPushButton("⚙", self._header_frame)
+        self._settings_btn.setObjectName("headerIconButton")
+        self._settings_btn.setAccessibleName("فتح الإعدادات")
+        self._settings_btn.setToolTip("الإعدادات")
+        self._settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._settings_btn.clicked.connect(self._on_settings_requested)
+        pin_row.addWidget(self._settings_btn)
+
+        # 2. History button
+        self._history_btn = QPushButton("⏱", self._header_frame)
+        self._history_btn.setObjectName("headerIconButton")
+        self._history_btn.setAccessibleName("فتح السجل اليومي")
+        self._history_btn.setToolTip("السجل")
+        self._history_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._history_btn.clicked.connect(self._on_history_requested)
+        pin_row.addWidget(self._history_btn)
+
+        # 3. Exit Button
         self._exit_btn = QPushButton("✕", self._header_frame)
         self._exit_btn.setObjectName("exitButton")
         self._exit_btn.setAccessibleName("إغلاق التطبيق نهائياً")
@@ -146,11 +166,11 @@ class MainWindow(QMainWindow):
         self._pin_widget.setAccessibleName("دبوس تثبيت الملاحظة")
         pin_row.addWidget(self._pin_widget)
 
-        # Right stretch to balance the row (equal to left stretch + width compensation)
+        # Right stretch to balance the row
         pin_row.addStretch(1)
 
-        # Symmetrical spacer matching exit button width (22px) so the pin remains perfectly centered
-        pin_row.addSpacing(22)
+        # Symmetrical spacer matching controls group width (22*3 + 4*2 = 74px) so the pin remains perfectly centered
+        pin_row.addSpacing(74)
 
         paper_layout.addWidget(self._header_frame)
 
@@ -348,15 +368,17 @@ class MainWindow(QMainWindow):
                 event.accept()
                 return
 
-            # Check if clicked inside header drag area (excluding child widgets like the exit button)
+            # Check if clicked inside header drag area (excluding child action buttons)
             if hasattr(self, "_header_frame"):
                 header_rect = self._header_frame.rect()
                 local_pos = self._header_frame.mapFromGlobal(global_pos)
                 if header_rect.contains(local_pos):
-                    # If clicked specifically on the exit button or its children, allow button to handle click
-                    if hasattr(self, "_exit_btn") and self._exit_btn.geometry().contains(local_pos):
-                        super().mousePressEvent(event)
-                        return
+                    # If clicked specifically on any header control buttons, let the button handle click
+                    for btn_attr in ("_settings_btn", "_history_btn", "_exit_btn"):
+                        btn = getattr(self, btn_attr, None)
+                        if btn is not None and btn.geometry().contains(local_pos):
+                            super().mousePressEvent(event)
+                            return
                     self._is_dragging = True
                     self._drag_start_pos = global_pos - self.frameGeometry().topLeft()
                     event.accept()

@@ -72,7 +72,32 @@ def get_application_stylesheet() -> str:
         max-height: 16px;
     }}
 
-    /* Top-Left Exit Button */
+    /* Top-Left Action Buttons (Settings, History, Exit) */
+    QPushButton#headerIconButton {{
+        background-color: transparent;
+        color: {COLOR_TEXT_SECONDARY};
+        border: none;
+        border-radius: 4px;
+        font-family: Arial, "Segoe UI", sans-serif;
+        font-size: 13px;
+        font-weight: normal;
+        min-width: 22px;
+        max-width: 22px;
+        min-height: 22px;
+        max-height: 22px;
+        padding: 0px;
+    }}
+
+    QPushButton#headerIconButton:hover {{
+        background-color: rgba(79, 124, 172, 0.22);
+        color: {COLOR_SOFT};
+    }}
+
+    QPushButton#headerIconButton:pressed {{
+        background-color: rgba(79, 124, 172, 0.42);
+        color: #FFFFFF;
+    }}
+
     QPushButton#exitButton {{
         background-color: transparent;
         color: {COLOR_TEXT_SECONDARY};

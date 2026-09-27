@@ -19,12 +19,13 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import traceback
 from unittest.mock import MagicMock
 
-from PySide6.QtCore import QPoint, QPointF, QRect, Qt, qVersion
+from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRect, Qt, qVersion
 from PySide6.QtGui import QColor, QImage, QPainterPath
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 ARTIFACTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "artifacts")
 os.makedirs(ARTIFACTS, exist_ok=True)
@@ -63,6 +64,194 @@ class FakeGeometryManager:
 
     def save_geometry(self, *args):
         self.saved.append(args)
+
+
+class ClickSpy(QObject):
+    """Counts mouse presses delivered to any widget inside a window.
+
+    Installed on the QApplication so that presses aimed at child widgets
+    (header, buttons, task list) are seen as well -- a real operating-system
+    click is routed to the widget under the cursor, not to the top level
+    window, so spying on ``QWidget.mousePressEvent`` alone would miss them.
+    """
+
+    def __init__(self, window):
+        super().__init__()
+        self._window = window
+        self.presses = []
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.MouseButtonPress:
+            widget = obj if isinstance(obj, QWidget) else None
+            if widget is not None and (
+                widget is self._window or self._window.isAncestorOf(widget)
+            ):
+                self.presses.append(
+                    (widget.objectName() or type(widget).__name__,
+                     round(event.position().x(), 1),
+                     round(event.position().y(), 1))
+                )
+        return False
+
+
+def real_os_click(screen_x, screen_y):
+    """Deliver a genuine operating-system mouse click at a screen position."""
+    import ctypes
+
+    user32 = ctypes.windll.user32
+    user32.SetCursorPos(int(screen_x), int(screen_y))
+    time.sleep(0.10)
+    user32.mouse_event(0x0002, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTDOWN
+    time.sleep(0.04)
+    user32.mouse_event(0x0004, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTUP
+    time.sleep(0.15)
+
+
+# --- rendered silhouette measurement ---------------------------------------
+PAPER_RGB = (30, 38, 54)    # #1E2636
+BORDER_RGB = (46, 58, 78)   # #2E3A4E
+TOLERANCE = 14
+
+
+def _close(rgb, target):
+    return all(abs(a - b) <= TOLERANCE for a, b in zip(rgb, target))
+
+
+def _silhouette_at(img, x, y):
+    """True when the pixel belongs to the painted paper or its border.
+
+    Both the alpha channel and the two palette colours are accepted so the
+    measurement works whether the platform leaves the area outside the paper
+    transparent (Linux/offscreen) or fills it opaquely (Windows).
+    """
+    if x < 0 or y < 0 or x >= img.width() or y >= img.height():
+        return False
+    r, g, b, a = img.pixelColor(x, y).getRgb()
+    if a <= 128:
+        return False
+    return _close((r, g, b), PAPER_RGB) or _close((r, g, b), BORDER_RGB)
+
+
+def _max_second_difference(values):
+    """High frequency roughness: small for a smooth curve, large for spikes."""
+    if len(values) < 3:
+        return 0
+    return max(
+        abs(values[i + 1] - 2 * values[i] + values[i - 1])
+        for i in range(1, len(values) - 1)
+    )
+
+
+def analyse_render(img):
+    """Measure the rendered silhouette: corners, straight sides, torn bottom.
+
+    Works on the pixels the platform actually composited, so anti-aliasing and
+    any one-pixel geometry error show up in the numbers.
+    """
+    w, h = img.width(), img.height()
+    scan = min(64, w, h)
+    profile = {}
+
+    def first_paper_column(y):
+        x = 0
+        while x < scan and not _silhouette_at(img, x, y):
+            x += 1
+        return x
+
+    def last_paper_column(y):
+        x = w - 1
+        while x >= w - scan and not _silhouette_at(img, x, y):
+            x -= 1
+        return x
+
+    def last_paper_row(x):
+        y = h - 1
+        while y >= h - scan and not _silhouette_at(img, x, y):
+            y -= 1
+        return y
+
+    # --- top-left / top-right corner radius --------------------------------
+    left_edge = [first_paper_column(y) for y in range(scan)]
+    right_edge = [last_paper_column(y) for y in range(scan)]
+
+    def corner_radius(edge, from_right=False):
+        target = w - 1 if from_right else 0
+        for y in range(scan):
+            if edge[y] == target:
+                return y
+        return None
+
+    profile["corner_radius_topleft"] = corner_radius(left_edge)
+    profile["corner_radius_topright"] = corner_radius(right_edge, from_right=True)
+    # anti-aliasing pulls the detected boundary inwards by about a pixel
+    profile["corner_max_curvature_jump"] = max(
+        _max_second_difference(left_edge), _max_second_difference(right_edge)
+    )
+    profile["corner_monotonic"] = all(
+        left_edge[i + 1] <= left_edge[i] for i in range(len(left_edge) - 1)
+    ) and all(right_edge[i + 1] >= right_edge[i] for i in range(len(right_edge) - 1))
+
+    # --- straight vertical sides ------------------------------------------
+    body_top = (corner_radius(left_edge) or 16) + 8
+    body_bottom = h - 24
+    side_left = [first_paper_column(y) for y in range(body_top, body_bottom)]
+    side_right = [last_paper_column(y) for y in range(body_top, body_bottom)]
+    profile["side_left_values"] = sorted(set(side_left))
+    profile["side_right_values"] = sorted(set(side_right))
+    profile["sides_straight"] = (
+        len(set(side_left)) == 1
+        and len(set(side_right)) == 1
+        and side_left[0] == 0
+        and side_right[0] == w - 1
+    )
+
+    # --- torn bottom edge -------------------------------------------------
+    bottom = [last_paper_row(x) for x in range(w)]
+    lowest = max(bottom)
+    highest = min(bottom)
+    profile["bottom_lowest_row"] = lowest
+    profile["bottom_highest_row"] = highest
+    profile["bottom_tear_depth"] = lowest - highest
+    profile["bottom_max_step"] = max(
+        (abs(bottom[i + 1] - bottom[i]) for i in range(w - 1)), default=0
+    )
+    profile["bottom_max_curvature_jump"] = _max_second_difference(bottom)
+    profile["bottom_baseline_reaches_window_edge"] = lowest == h - 1
+    profile["bottom_corners_solid"] = bottom[0] == h - 1 and bottom[w - 1] == h - 1
+
+    # count distinct upward nicks (tears)
+    tears = 0
+    in_tear = False
+    for value in bottom:
+        if value < lowest - 0.5:
+            if not in_tear:
+                tears += 1
+                in_tear = True
+        else:
+            in_tear = False
+    profile["tears_rendered"] = tears
+    return profile
+
+
+def content_clearance(window):
+    """Bottom edge, in window coordinates, of the lowest content widget.
+
+    The paper surface itself deliberately fills the whole window rectangle, so
+    it is excluded: what matters is how close the *content* comes to the torn
+    bottom edge.
+    """
+    paper = getattr(window, "_paper_surface", None)
+    scope = paper if paper is not None else window
+    lowest = None
+    for widget in scope.findChildren(QWidget):
+        if widget is scope or not widget.isVisible():
+            continue
+        if widget.height() <= 0 or widget.width() <= 0:
+            continue
+        bottom = widget.mapTo(window, QPoint(0, widget.height())).y()
+        if lowest is None or bottom > lowest:
+            lowest = bottom
+    return lowest
 
 
 def make_window(width=380, height=560, geometry=(120, 120, 380, 560)):
@@ -185,14 +374,25 @@ def main():
 
     # --- real transparency of the area outside the paper --------------------
     image = window.grab().toImage().convertToFormat(QImage.Format_ARGB32)
+
     def alpha(x, y):
-        return QColor(image.pixel(x, y)).alpha()
+        # QColor(QRgb) ignores the alpha bits, so read the channel explicitly
+        return image.pixelColor(x, y).getRgb()[3]
 
     outside = alpha(2, 2)
     inside = alpha(window.width() // 2, window.height() // 2)
+    outside_rgb = image.pixelColor(2, 2).getRgb()[:3]
     RESULTS["info"]["alpha_outside_paper"] = outside
     RESULTS["info"]["alpha_inside_paper"] = inside
+    RESULTS["info"]["outside_paper_rgb"] = list(outside_rgb)
     check("paper is fully opaque", inside == 255, f"alpha={inside}")
+    if outside == 0:
+        check("area outside the paper is transparent", True,
+              "alpha=0, so the desktop shows through the silhouette")
+    else:
+        note(f"area outside the paper is opaque in the grab ({outside_rgb}, alpha={outside}): "
+             "the grab rasterises the widget backing store, so on this platform the native "
+             "mask is what clips the silhouette on screen")
     if outside == 255:
         note("area outside the paper is opaque in the grab: the native mask is what "
              "clips the silhouette (no per-pixel alpha compositing on this platform/config)")
@@ -226,10 +426,14 @@ def main():
     if not platform_supports_mask:
         note(f"platform '{app.platformName()}' ignores native window masks, so click-through "
              "cannot be verified here -- it must be checked on a real Windows desktop")
+    # --- hit testing --------------------------------------------------------
+    # A synthetic QTest click is posted straight into the widget's event queue
+    # and therefore bypasses the native window mask completely, so it can only
+    # prove that the widget is alive.  Real click-through is proven further
+    # down with an operating-system level click.
     try:
         from PySide6.QtTest import QTest
 
-        # click inside the paper must reach the window, a click outside must not
         pressed = []
         original_mouse_press = window.mousePressEvent
 
@@ -238,23 +442,16 @@ def main():
             return original_mouse_press(event)
 
         window.mousePressEvent = spy
-        QTest.mouseClick(window, Qt.MouseButton.LeftButton, pos=QPoint(window.width() // 2, 40))
+        QTest.mouseClick(window, Qt.MouseButton.LeftButton,
+                         pos=QPoint(window.width() // 2, 40))
         QApplication.instance().processEvents()
-        inside_clicks = len(pressed)
-        pressed.clear()
-        QTest.mouseClick(window, Qt.MouseButton.LeftButton, pos=QPoint(2, 2))
-        QApplication.instance().processEvents()
-        outside_clicks = len(pressed)
         window.mousePressEvent = original_mouse_press
-        check("click inside the paper reaches the window", inside_clicks >= 1, f"{inside_clicks} events")
-        if platform_supports_mask:
-            check("click outside the paper does not reach the window", outside_clicks == 0,
-                  f"{outside_clicks} events")
-        else:
-            note(f"click outside the paper produced {outside_clicks} window event(s); expected 0 on a "
-                 "platform that honours native masks")
+        check("widget under the paper receives mouse input",
+              len(pressed) >= 1,
+              f"{len(pressed)} synthetic event(s); synthetic events bypass the native mask, "
+              "so this is only a liveness check")
     except Exception as exc:
-        note(f"QTest interaction checks unavailable: {exc}")
+        note(f"synthetic click check unavailable: {exc}")
         traceback.print_exc()
 
     # --- resize in all 8 directions ----------------------------------------
@@ -353,6 +550,86 @@ def main():
         note(f"resize/drag interaction checks unavailable: {exc}")
         traceback.print_exc()
 
+    # --- real operating-system click through the native mask ----------------
+    # Only a genuine OS-level click goes through the window region that
+    # setMask() installed, so this is the only meaningful click-through test.
+    try:
+        import ctypes
+
+        win = make_window(380, 560, geometry=(220, 140, 380, 560))
+        win.show()
+        win.raise_()
+        win.activateWindow()
+        QApplication.instance().processEvents()
+        try:
+            ctypes.windll.user32.SetForegroundWindow(int(win.winId()))
+        except Exception as exc:
+            note(f"could not force the window to the foreground: {exc}")
+        QApplication.instance().processEvents()
+        time.sleep(0.25)
+
+        spy = ClickSpy(win)
+        app.installEventFilter(spy)
+
+        inside = win.mapToGlobal(QPoint(win.width() // 2, win.height() // 2 + 40))
+        outside = win.mapToGlobal(QPoint(3, 3))
+
+        real_os_click(inside.x(), inside.y())
+        QApplication.instance().processEvents()
+        inside_hits = len(spy.presses)
+        spy.presses.clear()
+
+        real_os_click(outside.x(), outside.y())
+        QApplication.instance().processEvents()
+        outside_hits = len(spy.presses)
+
+        app.removeEventFilter(spy)
+        RESULTS["info"]["os_click_inside_hits"] = inside_hits
+        RESULTS["info"]["os_click_outside_hits"] = outside_hits
+        RESULTS["info"]["os_click_inside_target"] = [inside.x(), inside.y()]
+        RESULTS["info"]["os_click_outside_target"] = [outside.x(), outside.y()]
+
+        if inside_hits >= 1:
+            check("real OS click inside the paper reaches the window",
+                  True, f"{inside_hits} press event(s) at {inside.x()},{inside.y()}")
+            check("real OS click outside the paper is swallowed by the mask",
+                  outside_hits == 0,
+                  f"{outside_hits} press event(s) at {outside.x()},{outside.y()} "
+                  "(rounded top-left corner)")
+        else:
+            note("the runner did not deliver real mouse input to the window "
+                 f"(inside click produced {inside_hits} events), so native click-through "
+                 "could not be observed -- there was no positive control")
+        win.close()
+    except Exception as exc:
+        note(f"real OS click check unavailable: {exc}")
+        traceback.print_exc()
+
+    # --- content must not collide with the torn bottom edge ----------------
+    try:
+        win = make_window(380, 560)
+        lowest = content_clearance(win)
+        shape = win._note_shape
+        RESULTS["info"]["content"] = {
+            "lowest_content_bottom": lowest,
+            "window_height": win.height(),
+            "bottom_margin": (win.height() - lowest) if lowest is not None else None,
+            "max_tear_depth": shape.tear_depth,
+            "paper_bottom_margin": getattr(win, "PAPER_BOTTOM_MARGIN", None),
+        }
+        if lowest is not None:
+            margin = win.height() - lowest
+            check("bottom content clears the deepest tear",
+                  margin > shape.tear_depth,
+                  f"content bottom is {margin}px above the window edge, deepest tear is "
+                  f"{shape.tear_depth}px, so {margin - shape.tear_depth}px of clearance remains")
+        else:
+            note("no visible child widget found, content clearance not measured")
+        win.close()
+    except Exception as exc:
+        note(f"content clearance check unavailable: {exc}")
+        traceback.print_exc()
+
     # --- renders at several sizes ------------------------------------------
     try:
         for label, (w, h) in {
@@ -367,12 +644,47 @@ def main():
             path = os.path.join(ARTIFACTS, f"shape_{label}_{w}x{h}.png")
             img.save(path)
             mask = win.mask()
+            profile = analyse_render(img)
             RESULTS["info"][f"render_{label}"] = {
                 "size": [w, h], "tears": len(win._note_shape.tears),
                 "mask_bbox": mask.boundingRect().getCoords() if mask else None,
+                "profile": profile,
             }
+            # --- the mandated visual checks, as measured pixels -------------
+            check(f"{label} ({w}x{h}): top corners are rounded and smooth",
+                  profile["corner_radius_topleft"] is not None
+                  and profile["corner_radius_topright"] is not None
+                  and profile["corner_monotonic"]
+                  and profile["corner_max_curvature_jump"] <= 2,
+                  f"radius {profile['corner_radius_topleft']}/{profile['corner_radius_topright']}px, "
+                  f"monotonic={profile['corner_monotonic']}, "
+                  f"max curvature jump={profile['corner_max_curvature_jump']}px")
+            check(f"{label} ({w}x{h}): no rectangular background at the corners",
+                  not _silhouette_at(img, 2, 2) and not _silhouette_at(img, w - 3, 2),
+                  "the corner pixels belong to the background, not to the paper")
+            check(f"{label} ({w}x{h}): sides are straight and clean",
+                  profile["sides_straight"],
+                  f"left edge columns {profile['side_left_values']}, "
+                  f"right edge columns {profile['side_right_values']}")
+            check(f"{label} ({w}x{h}): bottom tears are subtle, smooth and unclipped",
+                  profile["bottom_tear_depth"] <= 8
+                  and profile["bottom_max_step"] <= 3
+                  and profile["bottom_max_curvature_jump"] <= 3
+                  and profile["bottom_baseline_reaches_window_edge"]
+                  and profile["bottom_corners_solid"],
+                  f"{profile['tears_rendered']} tears, depth {profile['bottom_tear_depth']}px, "
+                  f"max step {profile['bottom_max_step']}px, "
+                  f"max curvature jump {profile['bottom_max_curvature_jump']}px, "
+                  f"baseline reaches the window edge="
+                  f"{profile['bottom_baseline_reaches_window_edge']}")
+            print(f"rendered {path} -- corners r={profile['corner_radius_topleft']}/"
+                  f"{profile['corner_radius_topright']} "
+                  f"curvature_jump={profile['corner_max_curvature_jump']} "
+                  f"sides_straight={profile['sides_straight']} "
+                  f"tear_depth={profile['bottom_tear_depth']} "
+                  f"bottom_max_step={profile['bottom_max_step']} "
+                  f"tears={profile['tears_rendered']}", flush=True)
             win.close()
-            print(f"rendered {path}", flush=True)
     except Exception as exc:
         note(f"rendering failed: {exc}")
         traceback.print_exc()

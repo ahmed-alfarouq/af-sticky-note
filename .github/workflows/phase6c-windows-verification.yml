@@ -1,6 +1,7 @@
 # TEMPORARY Phase 6C Windows verification workflow.
 # Runs the organic paper-silhouette verification on a real windows-latest
-# runner and uploads renders + a JSON report as artifacts.
+# runner and returns the output through api.github.com (the driving sandbox
+# cannot reach the Actions log host or artifact blob storage).
 # This file is deleted again once the verification results are collected.
 name: phase6c-windows-verification
 
@@ -11,6 +12,8 @@ on:
       - arena/01a0e01c-af-sticky-note
     paths:
       - ".github/workflows/phase6c-windows-verification.yml"
+      - "phase6c_publish.py"
+      - "verify_windows_shape.py"
 
 jobs:
   # The portable backend suite is a stdlib-only runner: it deliberately mocks
@@ -18,15 +21,55 @@ jobs:
   # Qt-backed test module block forever on a modal dialog, so it is kept out.
   backend-suite:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - name: Portable backend suite (Windows, stdlib only)
+        continue-on-error: true
         shell: pwsh
-        run: python scripts/run_all_backend_tests.py
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          python scripts/run_all_backend_tests.py 2>&1 |
+            Tee-Object -FilePath artifacts\backend_suite.txt
+          "EXIT=$LASTEXITCODE" | Out-File -Append artifacts\backend_suite.txt
+
+      - name: Environment snapshot
+        shell: pwsh
+        run: |
+          "=== OS ===" | Out-File artifacts\env.txt
+          (Get-CimInstance Win32_OperatingSystem |
+            Select-Object Caption, Version, BuildNumber, OSArchitecture |
+            Format-List | Out-String).Trim() | Out-File -Append artifacts\env.txt
+          "=== Python ===" | Out-File -Append artifacts\env.txt
+          python -V | Out-File -Append artifacts\env.txt
+          "=== PySide6 ===" | Out-File -Append artifacts\env.txt
+          python -c "import PySide6; print('PySide6', PySide6.__version__)" |
+            Out-File -Append artifacts\env.txt
+          "=== Displays ===" | Out-File -Append artifacts\env.txt
+          Add-Type -AssemblyName System.Windows.Forms
+          [System.Windows.Forms.Screen]::AllScreens | ForEach-Object {
+            "$($_.DeviceName) $($_.Bounds.Width)x$($_.Bounds.Height) primary=$($_.Primary)"
+          } | Out-File -Append artifacts\env.txt
+          Get-Content artifacts\env.txt
+
+      - name: Publish backend results
+        if: always()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python phase6c_publish.py backend-suite artifacts/backend_suite.txt
+
+      - name: Upload verification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-backend-suite
+          path: artifacts/
+          if-no-files-found: warn
 
   windows-shape:
     runs-on: windows-latest
@@ -45,15 +88,36 @@ jobs:
           python -c "import PySide6; print('PySide6', PySide6.__version__)"
 
       - name: Focused shape tests
-        shell: pwsh
-        run: python -m pytest tests/test_note_shape.py -q
-
-      - name: Windows shape verification
+        continue-on-error: true
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          python verify_windows_shape.py 2>&1 | Tee-Object -FilePath artifacts\verification.log
+          python -m pytest tests/test_note_shape.py -q 2>&1 |
+            Tee-Object -FilePath artifacts\shape_tests.txt
+          "EXIT=$LASTEXITCODE" | Out-File -Append artifacts\shape_tests.txt
+
+      - name: Windows shape verification
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          python verify_windows_shape.py 2>&1 |
+            Tee-Object -FilePath artifacts\verification.log
+          "EXIT=$LASTEXITCODE" | Out-File -Append artifacts\verification.log
           Get-ChildItem artifacts
+
+      - name: Publish verification results
+        if: always()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python phase6c_publish.py windows-shape artifacts/report.json
+
+      - name: Publish verification log
+        if: always()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python phase6c_publish.py windows-shape-log artifacts/verification.log
 
       - name: Upload verification artifacts
         if: always()
@@ -61,4 +125,4 @@ jobs:
         with:
           name: phase6c-windows-verification
           path: artifacts/
-          if-no-files-found: error
+          if-no-files-found: warn

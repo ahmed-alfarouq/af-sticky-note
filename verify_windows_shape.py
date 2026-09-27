@@ -597,12 +597,65 @@ def main():
                   f"{outside_hits} press event(s) at {outside.x()},{outside.y()} "
                   "(rounded top-left corner)")
         else:
-            note("the runner did not deliver real mouse input to the window "
-                 f"(inside click produced {inside_hits} events), so native click-through "
-                 "could not be observed -- there was no positive control")
+            note("the runner did not deliver injected mouse input to the window "
+                 f"(inside click produced {inside_hits} events), so click-through could not "
+                 "be observed by clicking -- the operating-system hit test below is used "
+                 "instead, which needs no input injection")
         win.close()
     except Exception as exc:
         note(f"real OS click check unavailable: {exc}")
+        traceback.print_exc()
+
+    # --- operating-system hit test of the window mask -----------------------
+    # WindowFromPoint performs the same hit test Windows uses to route a real
+    # click, honouring the window region that setMask() installed and the
+    # per-pixel alpha of a layered window -- without injecting any input.
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class POINT(ctypes.Structure):
+            _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+
+        user32 = ctypes.windll.user32
+        win = make_window(380, 560, geometry=(220, 140, 380, 560))
+        win.show()
+        win.raise_()
+        win.activateWindow()
+        QApplication.instance().processEvents()
+        time.sleep(0.25)
+        hwnd = int(win.winId())
+
+        def hit(screen_x, screen_y):
+            return int(user32.WindowFromPoint(POINT(int(screen_x), int(screen_y))))
+
+        inside = win.mapToGlobal(QPoint(win.width() // 2, win.height() // 2 + 40))
+        outside = win.mapToGlobal(QPoint(3, 3))
+        inside_hwnd = hit(inside.x(), inside.y())
+        outside_hwnd = hit(outside.x(), outside.y())
+        RESULTS["info"]["hit_test"] = {
+            "hwnd": hwnd,
+            "inside_point": [inside.x(), inside.y()],
+            "inside_hwnd": inside_hwnd,
+            "inside_is_our_window": inside_hwnd == hwnd,
+            "outside_point": [outside.x(), outside.y()],
+            "outside_hwnd": outside_hwnd,
+            "outside_is_our_window": outside_hwnd == hwnd,
+        }
+        if inside_hwnd == hwnd:
+            check("OS hit test inside the paper resolves to the sticky note", True,
+                  f"WindowFromPoint({inside.x()},{inside.y()}) -> our window")
+            check("OS hit test outside the paper resolves to another window",
+                  outside_hwnd != hwnd,
+                  f"WindowFromPoint({outside.x()},{outside.y()}) -> hwnd {outside_hwnd}, "
+                  "not ours (the rounded top-left corner is outside the window)")
+        else:
+            note(f"the sticky note is not the topmost window at ({inside.x()},{inside.y()}) "
+                 f"(hwnd {inside_hwnd} is), so the operating-system hit test has no positive "
+                 "control and cannot be used here")
+        win.close()
+    except Exception as exc:
+        note(f"OS hit test check unavailable: {exc}")
         traceback.print_exc()
 
     # --- content must not collide with the torn bottom edge ----------------

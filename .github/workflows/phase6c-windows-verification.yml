@@ -13,11 +13,26 @@ on:
       - ".github/workflows/phase6c-windows-verification.yml"
 
 jobs:
-  verify:
+  # The portable backend suite is a stdlib-only runner: it deliberately mocks
+  # pytest and never imports PySide6.  Installing PySide6 on this job makes a
+  # Qt-backed test module block forever on a modal dialog, so it is kept out.
+  backend-suite:
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Portable backend suite (Windows, stdlib only)
+        shell: pwsh
+        run: python scripts/run_all_backend_tests.py
 
+  windows-shape:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -28,10 +43,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "PySide6==6.7.2" pytest
           python -c "import PySide6; print('PySide6', PySide6.__version__)"
-
-      - name: Portable backend suite
-        shell: pwsh
-        run: python scripts/run_all_backend_tests.py
 
       - name: Focused shape tests
         shell: pwsh

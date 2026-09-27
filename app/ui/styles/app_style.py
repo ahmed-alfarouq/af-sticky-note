@@ -180,7 +180,9 @@ def get_application_stylesheet() -> str:
     }}
 
     QLabel#taskTextLabel {{
-        qproperty-alignment: AlignRight | AlignVCenter;
+        /* Keep this value quoted: an unquoted pipe makes Qt's QSS parser
+           discard this entire stylesheet (tests/test_app_stylesheet.py). */
+        qproperty-alignment: 'AlignRight | AlignVCenter';
         color: {COLOR_TEXT_PRIMARY};
         font-size: 14px;
         font-weight: 500;
@@ -188,7 +190,9 @@ def get_application_stylesheet() -> str:
     }}
 
     QLabel#taskTextLabelCompleted {{
-        qproperty-alignment: AlignRight | AlignVCenter;
+        /* Keep this value quoted: an unquoted pipe makes Qt's QSS parser
+           discard this entire stylesheet (tests/test_app_stylesheet.py). */
+        qproperty-alignment: 'AlignRight | AlignVCenter';
         color: {COLOR_TEXT_COMPLETED};
         font-size: 14px;
         text-decoration: line-through;
@@ -227,6 +231,11 @@ def get_application_stylesheet() -> str:
         border-radius: 5px;
         padding: 4px 8px;
         font-size: 12px;
+        /* Qt reads min-width / max-width as the *content* width and then adds
+           this rule's padding and border, so the laid-out control is ~18px
+           wider than the numbers below. The QSizePolicy.Maximum +
+           AdjustToContents set in PrioritySelector are what actually keep the
+           control compact; these are only outer bounds. */
         min-width: 68px;
         max-width: 92px;
     }}
@@ -305,7 +314,9 @@ def get_application_stylesheet() -> str:
 
     /* Task Input Field */
     QLineEdit#taskInputField {{
-        qproperty-alignment: AlignRight | AlignVCenter;
+        /* Keep this value quoted: an unquoted pipe makes Qt's QSS parser
+           discard this entire stylesheet (tests/test_app_stylesheet.py). */
+        qproperty-alignment: 'AlignRight | AlignVCenter';
         background-color: {COLOR_INPUT_BG};
         color: {COLOR_TEXT_PRIMARY};
         border: 1.5px solid {COLOR_CARD_BORDER};

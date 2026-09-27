@@ -23,6 +23,15 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO not in sys.path:
     sys.path.insert(0, REPO)
 
+# A Windows console defaults to a legacy code page (cp1252 / cp437) that cannot
+# encode the Arabic labels, and printing one raises UnicodeEncodeError.  This
+# harness reports on Arabic UI strings, so force a UTF-8 stream.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # pragma: no cover - older interpreters
+        pass
+
 RESULTS = []
 NOTES = []
 
@@ -587,6 +596,12 @@ def check_platform_regressions():
     import ctypes
 
     from PySide6.QtCore import Qt
+
+    if not hasattr(ctypes, "windll"):
+        note("platform checks skipped: ctypes.windll is Windows-only "
+             "(this run is not on Windows)")
+        return
+
     from PySide6.QtWidgets import QApplication
 
     from app.core.models import Day, TaskPriority
@@ -654,12 +669,22 @@ def check_platform_regressions():
 
     # The desktop layer must still attach (or report honestly why not).
     try:
-        from app.platform.windows.desktop_layer import WindowsDesktopLayer
+        from app.platform.windows.desktop_window import (
+            WindowsDesktopWindowController,
+        )
 
-        layer = WindowsDesktopLayer()
-        attached = layer.attach(win) if hasattr(layer, "attach") else None
-        record("Windows desktop layer still loads", True,
-               f"attach returned {attached}")
+        layer = WindowsDesktopWindowController()
+        hwnd = int(win.winId())
+        attached = layer.attach_to_desktop(hwnd)
+        record("Windows desktop layer still attaches", bool(attached),
+               f"attach_to_desktop(0x{hwnd:x}) -> {attached}")
+
+        # WS_EX_TOOLWINDOW keeps the note out of the taskbar and Alt+Tab.
+        user32 = ctypes.windll.user32
+        ex = user32.GetWindowLongW(ctypes.c_void_p(hwnd), -20)
+        record("desktop layer keeps the note out of taskbar / Alt+Tab",
+               bool(ex & 0x80) and not bool(ex & 0x40000),
+               f"exstyle=0x{ex & 0xFFFFFFFF:x}")
     except Exception as exc:  # noqa: BLE001
         note(f"desktop layer attach not verifiable on this runner: {exc}")
 

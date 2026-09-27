@@ -667,34 +667,46 @@ def check_platform_regressions():
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
+def _esc(text):
+    """Escape a string for use in a GitHub workflow command."""
+    return (text.replace("%", "%25")
+                .replace("\r", "%0D")
+                .replace("\n", "%0A"))
+
+
 def emit_annotations():
-    """Publish the report as check-run annotations (the only reachable channel)."""
+    """Publish results as check-run annotations -- the only reachable channel.
+
+    Failures are emitted FIRST, because GitHub does not reliably return every
+    annotation from a step: if the tail is dropped, the critical information is
+    still there.
+    """
     passed = sum(1 for _, ok, _ in RESULTS if ok)
     failed = [(n, d) for n, ok, d in RESULTS if not ok]
 
-    header = (f"PHASE 6D.1 WINDOWS VERIFICATION -- {passed} passed, "
-              f"{len(failed)} failed, {len(RESULTS)} total")
-    lines = [header, "=" * 60]
-    for name, ok, detail in RESULTS:
-        lines.append(f"[{'PASS' if ok else 'FAIL'}] {name}"
-                     + (f" -- {detail}" if detail else ""))
-    if NOTES:
-        lines.append("-" * 60)
-        lines.append("NOTES (not verifiable on a CI runner):")
-        lines.extend(NOTES)
     if failed:
-        lines.append("-" * 60)
-        lines.append("FAILURES:")
+        lines = [f"PHASE 6D.1 WINDOWS VERIFICATION -- {len(failed)} FAILURE(S) "
+                 f"of {len(RESULTS)} checks"]
         for name, detail in failed:
-            lines.append(f"  - {name}  {detail}")
+            lines.append(f"FAIL: {name}")
+            if detail:
+                lines.append(f"      {detail}")
+        print("::error title=phase6d1-FAILURES::" + _esc("\n".join(lines)))
 
-    body = "\n".join(lines)
-    # GitHub workflow command escaping: % -> %25, CR -> %0D, LF -> %0A
-    escaped = body.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-    chunk = 800
-    parts = [escaped[i:i + chunk] for i in range(0, len(escaped), chunk)] or [""]
-    for index, part in enumerate(parts, start=1):
-        print(f"::warning title=phase6d1-report-part{index}of{len(parts)}::{part}")
+    if NOTES:
+        print("::warning title=phase6d1-NOTES::"
+              + _esc("NOT VERIFIABLE ON A CI RUNNER:\n" + "\n".join(NOTES)))
+
+    summary = (f"PHASE 6D.1 WINDOWS VERIFICATION -- {passed} passed, "
+               f"{len(failed)} failed, {len(RESULTS)} total")
+    print("::warning title=phase6d1-SUMMARY::" + _esc(summary))
+
+    # One small annotation per check, in order.
+    for index, (name, ok, detail) in enumerate(RESULTS, start=1):
+        text = f"[{'PASS' if ok else 'FAIL'}] {name}"
+        if detail:
+            text += f" -- {detail}"
+        print(f"::notice title=phase6d1-check{index:02d}::" + _esc(text[:400]))
 
 
 def main():

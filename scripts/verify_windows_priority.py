@@ -748,7 +748,9 @@ def emit_annotations():
     # --annotate <substring> to surface the checks that were truncated away.
     shown = RESULTS
     if ANNOTATE_FILTER:
-        shown = [r for r in RESULTS if ANNOTATE_FILTER.lower() in r[0].lower()]
+        needles = [n.strip().lower() for n in ANNOTATE_FILTER.split(",") if n.strip()]
+        shown = [r for r in RESULTS
+                 if any(n in r[0].lower() for n in needles)]
         print(f"::warning title=phase6d1-FILTER::"
               + _esc(f"annotating {len(shown)} of {len(RESULTS)} checks "
                      f"matching {ANNOTATE_FILTER!r}"))

@@ -42,4 +42,4 @@ jobs:
       # actual values come back.
       - name: Windows platform regression detail
         shell: pwsh
-        run: python scripts/verify_windows_priority.py --annotate platform
+        run: python scripts/verify_windows_priority.py --annotate "window,tray,desktop,geometry,minimum"

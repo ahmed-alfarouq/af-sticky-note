@@ -15,6 +15,7 @@ Usage (inside the workflow):
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import traceback
 
@@ -82,6 +83,29 @@ def env_snapshot():
     lines.append(f"=== Qt ===")
     lines.append(f"Qt runtime version: {app.property('QtVersion') or 'n/a'}")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# 1b. The focused test suite, on real Windows
+# ---------------------------------------------------------------------------
+def check_focused_tests():
+    """Run the priority tests under pytest on this Windows runner.
+
+    Captured here rather than in its own workflow step so the outcome comes
+    back through the annotation channel even when another step fails.
+    """
+    targets = ["tests/test_app_stylesheet.py", "tests/test_task_priority_ux.py"]
+    proc = subprocess.run(
+        [sys.executable, "-m", "pytest", *targets, "-q", "--no-header"],
+        cwd=REPO, capture_output=True, text=True, timeout=900,
+    )
+    tail = (proc.stdout + proc.stderr).strip().splitlines()[-25:]
+    summary = " | ".join(line.strip() for line in tail if line.strip())
+    record("focused priority tests pass on Windows", proc.returncode == 0,
+           summary or f"exit {proc.returncode}")
+    for line in tail:
+        if line.strip():
+            print("       " + line.strip())
 
 
 # ---------------------------------------------------------------------------
@@ -682,6 +706,7 @@ def main():
     print(env_snapshot())
 
     for name, fn in [
+        ("focused tests", check_focused_tests),
         ("stylesheet accepted", check_stylesheet_accepted),
         ("dark theme renders", check_dark_theme_renders),
         ("priority selector", check_priority_selector),

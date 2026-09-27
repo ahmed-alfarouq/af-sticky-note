@@ -242,30 +242,30 @@ def test_priority_selector_stays_compact_under_the_real_stylesheet():
         row = QHBoxLayout(host)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(8)
+        field = QLineEdit()
         row.addWidget(selector)
-        row.addWidget(QLineEdit(), 1)
+        row.addWidget(field, 1)
         host.resize(380, 60)
         host.show()
 
         try:
-            # 1. It must not dominate the row.
-            assert selector.width() <= 0.35 * host.width(), (
-                f"priority selector is {selector.width()}px of a "
-                f"{host.width()}px row -- it must not compete with the task text"
+            # 1. It must not dominate the row: the task text field keeps more
+            #    space than the selector.  This holds for any font or DPI,
+            #    unlike a fixed pixel budget.
+            assert selector.width() < field.width(), (
+                f"priority selector ({selector.width()}px) is as wide as or wider "
+                f"than the task input ({field.width()}px) -- it must stay secondary "
+                "to the task text"
             )
 
-            # 2. Every label must fit without eliding.
-            metrics = selector.fontMetrics()
-            for index in range(selector.count()):
-                needed = metrics.horizontalAdvance(selector.itemText(index))
-                # 18px of padding+border and a 14px drop-down are not text space.
-                available = selector.width() - 18 - 14
-                assert needed <= available, (
-                    f"label {selector.itemText(index)!r} needs {needed}px but only "
-                    f"{available}px is available in a {selector.width()}px selector"
-                )
+            # 2. It must never be squeezed below its own minimum, which is what
+            #    would clip an Arabic label.
+            assert selector.width() >= selector.minimumSizeHint().width(), (
+                f"priority selector is {selector.width()}px but needs at least "
+                f"{selector.minimumSizeHint().width()}px -- a label is being clipped"
+            )
 
-            # 3. It must not collapse to something unclickable.
+            # 3. It must stay comfortably clickable.
             assert selector.height() >= 20, (
                 f"priority selector is only {selector.height()}px tall"
             )

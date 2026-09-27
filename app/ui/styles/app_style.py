@@ -49,16 +49,22 @@ def get_application_stylesheet() -> str:
         color: {COLOR_TEXT_PRIMARY};
     }}
 
-    /* Main Window background acts as the desktop/board */
+    /* The window itself must stay fully transparent: the paper silhouette
+       (rounded top corners + organic bottom edge) is painted by PaperSurface
+       along a shared path, and the window mask is derived from that same
+       path. Any background painted here would show up as a rectangle
+       outside the paper and would defeat both the mask and the
+       anti-aliased edge. */
     QMainWindow {{
-        background-color: {COLOR_BACKGROUND};
+        background: transparent;
     }}
 
-    /* The Sticky Note paper container - tactile rounded paper surface */
+    /* The Sticky Note paper surface. Its silhouette and border are painted
+       by PaperSurface from app/ui/note_shape.py, so no rectangular
+       background, border or border-radius belongs here. */
     QFrame#stickyNoteFrame {{
-        background-color: {COLOR_STICKY_PAPER};
-        border: 1px solid {COLOR_STICKY_BORDER};
-        border-radius: 14px;
+        background: transparent;
+        border: none;
     }}
 
     /* Decorative Pin Element - refined physical metallic pin */

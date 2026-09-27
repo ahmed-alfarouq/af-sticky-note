@@ -3,11 +3,30 @@
 Assembles the paper note surface, decorative pin header, daily quote,
 scrollable task list, and task input. Features full accessibility
 descriptions, RTL alignment, and keyboard navigation.
+
+Paper silhouette (Phase 6B)
+---------------------------
+The note is no longer a rectangular window with rounded corners: it has an
+organic paper silhouette (rounded top corners, straight sides, subtly
+irregular bottom edge). The silhouette is owned by
+:mod:`app.ui.note_shape` and is used in three places, always derived from
+the *current* window size:
+
+  1. ``PaperSurface`` paints the paper and its border along the path,
+  2. the same path becomes the window mask, so the physical OS window
+     (and therefore its clickable region) follows the paper, and
+  3. the border is stroked on an inset copy of the path so it is never
+     clipped by that mask.
+
+The path and the mask are rebuilt **only** when the window size changes
+(:meth:`_update_note_shape`, driven by ``resizeEvent`` / ``showEvent`` and
+the initial setup) — never from ``paintEvent`` — so normal painting costs
+one fill plus one stroke and no geometry or region work.
 """
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional, Sequence
+from typing import Callable, Optional, Sequence, Tuple
 
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QMouseEvent
@@ -26,7 +45,9 @@ from app.core.models import Day, Task
 from app.core.services.task_service import TaskService
 from app.infrastructure.paths import get_logo_path
 from app.ui.geometry_manager import WindowGeometryManager
+from app.ui.note_shape import NoteShape, build_note_shape
 from app.ui.styles.app_style import get_application_stylesheet
+from app.ui.widgets.paper_surface import PaperSurface, shape_to_region
 from app.ui.widgets.quote_widget import QuoteWidget
 from app.ui.widgets.task_input import TaskInput
 from app.ui.widgets.task_list import TaskList
@@ -36,6 +57,10 @@ logger = logging.getLogger(__name__)
 
 class MainWindow(QMainWindow):
     """Sticky Note main window coordinating the daily quote and tasks."""
+
+    #: Bottom content margin. Deeper than the side margins so no content row
+    #: ever collides with the organic bottom edge of the paper.
+    PAPER_BOTTOM_MARGIN = 18
 
     def __init__(
         self,
@@ -99,6 +124,12 @@ class MainWindow(QMainWindow):
         # Flag to indicate whether window closing should hide to tray or do real shutdown
         self._allow_window_close: bool = False
 
+        # Organic paper silhouette state. The shape is derived from the current
+        # window size and refreshed on size changes only -- see
+        # _update_note_shape() / _update_note_mask().
+        self._note_shape: Optional[NoteShape] = None
+        self._note_shape_size: Optional[Tuple[int, int]] = None
+
         self._init_layout(day.date, quote_text, initial_tasks)
         self.setStyleSheet(get_application_stylesheet())
 
@@ -106,29 +137,38 @@ class MainWindow(QMainWindow):
         gx, gy, gw, gh = self._geometry_manager.get_validated_geometry()
         self.setGeometry(gx, gy, gw, gh)
 
+        # Build the paper silhouette (and its window mask) for the restored
+        # size. Also re-checked in showEvent / resizeEvent.
+        self._update_note_shape()
+
     def _init_layout(
         self,
         date_str: str,
         quote_text: Optional[str],
         initial_tasks: Sequence[Task],
     ) -> None:
-        # Outer board layout
+        # Outer board layout. No outer margin: the paper silhouette is the
+        # window itself, so the window mask can follow it exactly. An inset
+        # paper would leave an invisible-but-clickable frame around the note
+        # and would break edge/corner resizing.
         outer_layout = QVBoxLayout(self._central_widget)
-        outer_layout.setContentsMargins(14, 14, 14, 14)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
         outer_layout.setSpacing(0)
 
-        # Sticky Note paper surface
-        self._paper_frame = QFrame(self._central_widget)
-        self._paper_frame.setObjectName("stickyNoteFrame")
-        self._paper_frame.setAccessibleName("لوحة الملاحظة الورقية")
-        outer_layout.addWidget(self._paper_frame)
+        # Sticky Note paper surface (organic silhouette, painted by PaperSurface)
+        self._paper_surface = PaperSurface(parent=self._central_widget)
+        self._paper_surface.setAccessibleName("لوحة الملاحظة الورقية")
+        outer_layout.addWidget(self._paper_surface)
 
-        paper_layout = QVBoxLayout(self._paper_frame)
-        paper_layout.setContentsMargins(16, 12, 16, 16)
+        paper_layout = QVBoxLayout(self._paper_surface)
+        # The bottom margin is deliberately deeper than the others: it keeps
+        # every content row clear of the organic bottom edge, whose tears can
+        # rise up to DEFAULT_TEAR_DEPTH pixels into the paper.
+        paper_layout.setContentsMargins(16, 12, 16, self.PAPER_BOTTOM_MARGIN)
         paper_layout.setSpacing(12)
 
         # 1. Decorative Pin Header (Designated Drag Area) with Right-Side Control Icons
-        self._header_frame = QFrame(self._paper_frame)
+        self._header_frame = QFrame(self._paper_surface)
         self._header_frame.setObjectName("headerFrame")
         self._header_frame.setCursor(Qt.CursorShape.ArrowCursor)
 
@@ -182,11 +222,11 @@ class MainWindow(QMainWindow):
         paper_layout.addWidget(self._header_frame)
 
         # 2. Daily Quote & Date Card
-        self._quote_widget = QuoteWidget(date_text=date_str, quote_text=quote_text, parent=self._paper_frame)
+        self._quote_widget = QuoteWidget(date_text=date_str, quote_text=quote_text, parent=self._paper_surface)
         paper_layout.addWidget(self._quote_widget)
 
         # 3. Scrollable Task List
-        self._task_list = TaskList(parent=self._paper_frame)
+        self._task_list = TaskList(parent=self._paper_surface)
         self._task_list.task_completed_toggled.connect(self._on_task_completed_toggled)
         self._task_list.task_edit_requested.connect(self._on_task_edit_requested)
         self._task_list.task_delete_requested.connect(self._on_task_delete_requested)
@@ -197,9 +237,72 @@ class MainWindow(QMainWindow):
         paper_layout.addWidget(self._task_list, 1)
 
         # 4. Task Input
-        self._task_input = TaskInput(parent=self._paper_frame)
+        self._task_input = TaskInput(parent=self._paper_surface)
         self._task_input.task_submitted.connect(self._on_task_submitted)
         paper_layout.addWidget(self._task_input)
+
+    # -------------------------------------------------------------------------
+    # Organic paper silhouette: shape + window mask lifecycle
+    # -------------------------------------------------------------------------
+
+    def _update_note_shape(self) -> None:
+        """Rebuild the paper silhouette for the current window size.
+
+        This is the single place where the shape is (re)generated, and it is
+        driven by geometry changes only:
+
+            initial setup -> resizeEvent -> showEvent -> drag/resize release
+
+        It is deliberately *not* called from ``paintEvent``: repainting must
+        not rebuild paths or re-create window masks.
+
+        The work is skipped entirely when the size has not changed, so
+        repeated calls (e.g. several resize events while dragging a window
+        edge, or a show after a resize) cost nothing.
+        """
+        size = (self.width(), self.height())
+        if self._note_shape is not None and size == self._note_shape_size:
+            return
+
+        self._note_shape_size = size
+        try:
+            shape = build_note_shape(float(size[0]), float(size[1]))
+        except ValueError as exc:
+            # A zero-sized window can happen transiently while minimising.
+            logger.debug("Skipping paper silhouette for degenerate size %s: %s", size, exc)
+            return
+
+        self._note_shape = shape
+        self._paper_surface.set_shape(shape)
+        self._update_note_mask()
+
+    def _update_note_mask(self) -> None:
+        """Make the physical OS window follow the paper silhouette.
+
+        The mask is derived from the exact same :class:`NoteShape` the paper
+        is painted from, so the visible note, its border and the clickable
+        window region always agree. Because the paper spans the whole window
+        (only the rounded top corners and the bottom notches are excluded),
+        all four resize edges and all four corners stay usable.
+
+        Called from :meth:`_update_note_shape` only -- never while painting.
+        """
+        if self._note_shape is None:
+            return
+        try:
+            self.setMask(shape_to_region(self._note_shape))
+        except Exception as exc:  # pragma: no cover - defensive, platform specific
+            logger.warning("Failed to apply the organic paper window mask: %s", exc)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Keep the paper silhouette and window mask in sync with the size."""
+        super().resizeEvent(event)
+        self._update_note_shape()
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Refresh the silhouette once the window is actually sized and shown."""
+        super().showEvent(event)
+        self._update_note_shape()
 
     def refresh_daily_view(
         self,

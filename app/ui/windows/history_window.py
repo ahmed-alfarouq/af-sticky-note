@@ -24,10 +24,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core.models import Task
+from app.core.models import Task, TaskPriority
 from app.core.services.history_service import DayHistoryView, HistoryService
 from app.infrastructure.clock import format_dual_calendar_date
 from app.infrastructure.paths import get_logo_path
+from app.ui.priority_presentation import PRIORITY_LABELS
 from app.ui.styles.app_style import get_application_stylesheet
 
 logger = logging.getLogger(__name__)
@@ -223,6 +224,16 @@ class HistoryWindow(QDialog):
 
         row.addWidget(indicator)
         row.addWidget(text_label, 1)
+
+        # Historical priority, shown exactly as it was recorded on that day.
+        # Read-only: the HistoryService never mutates task records.
+        if task.priority in (TaskPriority.HIGH, TaskPriority.LOW):
+            badge = QLabel(PRIORITY_LABELS[task.priority], frame)
+            badge.setObjectName(
+                "priorityBadgeHigh" if task.priority == TaskPriority.HIGH else "priorityBadgeLow"
+            )
+            row.addWidget(badge)
+
         return frame
 
     def _on_prev_day(self) -> None:

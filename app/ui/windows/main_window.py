@@ -41,13 +41,14 @@ from PySide6.QtWidgets import (
 )
 
 from app.config.settings import APP_NAME
-from app.core.models import Day, Task
+from app.core.models import Day, Task, TaskPriority
 from app.core.services.task_service import TaskService
 from app.infrastructure.paths import get_logo_path
 from app.ui.geometry_manager import WindowGeometryManager
 from app.ui.note_shape import NoteShape, build_note_shape
 from app.ui.styles.app_style import get_application_stylesheet
 from app.ui.widgets.paper_surface import PaperSurface, shape_to_region
+from app.ui.widgets.priority_selector import PrioritySelector
 from app.ui.widgets.quote_widget import QuoteWidget
 from app.ui.widgets.task_input import TaskInput
 from app.ui.widgets.task_list import TaskList
@@ -230,16 +231,32 @@ class MainWindow(QMainWindow):
         self._task_list.task_completed_toggled.connect(self._on_task_completed_toggled)
         self._task_list.task_edit_requested.connect(self._on_task_edit_requested)
         self._task_list.task_delete_requested.connect(self._on_task_delete_requested)
+        self._task_list.task_priority_change_requested.connect(
+            self._on_task_priority_change_requested
+        )
         self._task_list.clear_completed_requested.connect(self._on_clear_completed_requested)
         self._task_list.history_requested.connect(self._on_history_requested)
         self._task_list.settings_requested.connect(self._on_settings_requested)
         self._task_list.set_tasks(initial_tasks)
         paper_layout.addWidget(self._task_list, 1)
 
-        # 4. Task Input
-        self._task_input = TaskInput(parent=self._paper_surface)
+        # 4. Task Input row: [priority selector] [task text field]
+        # The selector is added first so RTL puts it on the right, next to the
+        # other controls, and the text field takes all remaining space.
+        input_row = QWidget(self._paper_surface)
+        input_row.setObjectName("taskInputRow")
+        input_layout = QHBoxLayout(input_row)
+        input_layout.setContentsMargins(0, 0, 0, 0)
+        input_layout.setSpacing(8)
+
+        self._priority_selector = PrioritySelector(parent=input_row)
+        input_layout.addWidget(self._priority_selector)
+
+        self._task_input = TaskInput(parent=input_row)
         self._task_input.task_submitted.connect(self._on_task_submitted)
-        paper_layout.addWidget(self._task_input)
+        input_layout.addWidget(self._task_input, 1)
+
+        paper_layout.addWidget(input_row)
 
     # -------------------------------------------------------------------------
     # Organic paper silhouette: shape + window mask lifecycle
@@ -318,6 +335,9 @@ class MainWindow(QMainWindow):
     def _on_task_submitted(self, raw_text: str) -> None:
         """Handle task submission from TaskInput.
 
+        The priority chosen in the selector is handed to the service as a
+        ``TaskPriority`` -- it is never inferred from the task text.
+
         Crucial rule: TaskInput is only cleared AFTER task creation succeeds.
         If validation or persistence fails, raw text remains untouched.
         """
@@ -326,10 +346,17 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            created_task = self._task_service.create_task(self._day.id, raw_text)
+            created_task = self._task_service.create_task(
+                self._day.id,
+                raw_text,
+                priority=self._priority_selector.selected_priority(),
+            )
             if created_task is not None:
                 self._task_list.add_task(created_task)
                 self._task_input.clear()
+                # Reset the selector so the next task starts from the neutral
+                # default instead of silently inheriting the previous choice.
+                self._priority_selector.set_priority(TaskPriority.MEDIUM)
             # Retain focus in input field whether text was created or empty
             self._task_input.setFocus()
         except Exception as exc:
@@ -344,21 +371,55 @@ class MainWindow(QMainWindow):
             logger.error("Failed to toggle completion for task %d: %s", task_id, exc)
 
     def _on_task_edit_requested(self, task_id: int) -> None:
-        """Open edit dialog and persist updated task text."""
+        """Open edit dialog and persist updated task text and/or priority.
+
+        The current values are read from the TaskItem that is already on
+        screen -- the Task object it holds carries the priority -- so no extra
+        database round trip is needed.
+        """
         try:
-            # Find current text from UI item or task service
+            # Find the current task from the UI item; it already carries both
+            # the text and the priority.
             task_item = self._task_list._items.get(task_id)
-            current_text = task_item._text_label.text() if task_item else ""
+            current_text = task_item.task_text if task_item else ""
+            current_priority = task_item.priority if task_item else TaskPriority.MEDIUM
 
             from app.ui.widgets.task_edit_dialog import TaskEditDialog
-            dialog = TaskEditDialog(initial_text=current_text, parent=self)
+            dialog = TaskEditDialog(
+                initial_text=current_text,
+                initial_priority=current_priority,
+                parent=self,
+            )
             if dialog.exec():
                 new_text = dialog.get_text()
+                new_priority = dialog.get_priority()
+
+                # Text and priority are independent: changing one must never
+                # silently reset the other.
                 if new_text and new_text != current_text:
                     if self._task_service.update_task_text(task_id, new_text):
                         self._task_list.update_task_text(task_id, new_text)
+                if new_priority != current_priority:
+                    self._task_service.update_task_priority(task_id, new_priority)
+                    self._task_list.update_task_priority(task_id, new_priority)
         except Exception as exc:
             logger.error("Failed to edit task %d: %s", task_id, exc)
+
+    def _on_task_priority_change_requested(
+        self, task_id: int, priority: TaskPriority
+    ) -> None:
+        """Change a task's priority straight from its context menu.
+
+        Updates the record in place: same id, day, source task, completion
+        state, text and position -- only the priority column changes.
+        """
+        try:
+            if not isinstance(priority, TaskPriority):
+                priority = TaskPriority(priority)
+            self._task_service.update_task_priority(task_id, priority)
+            self._task_list.update_task_priority(task_id, priority)
+        except Exception as exc:
+            logger.error("Failed to change priority for task %d: %s", task_id, exc)
 
     def _on_task_delete_requested(self, task_id: int) -> None:
         """Handle deletion of a specific task."""

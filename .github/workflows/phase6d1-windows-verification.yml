@@ -35,3 +35,11 @@ jobs:
       - name: Windows priority verification
         shell: pwsh
         run: python scripts/verify_windows_priority.py
+
+      # GitHub only returns a handful of annotations per check-run, so the
+      # platform-regression checks (window flags, taskbar / Alt+Tab, tray,
+      # desktop layer, geometry) are re-emitted on their own to make sure their
+      # actual values come back.
+      - name: Windows platform regression detail
+        shell: pwsh
+        run: python scripts/verify_windows_priority.py --annotate platform

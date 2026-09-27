@@ -667,6 +667,20 @@ def check_platform_regressions():
                f"exstyle=0x{ex & 0xFFFFFFFF:x}")
     win.close()
 
+    # The tray: on a CI runner there is no interactive shell, so this is
+    # reported as a note rather than claimed as verified.
+    try:
+        from PySide6.QtWidgets import QSystemTrayIcon
+
+        available = QSystemTrayIcon.isSystemTrayAvailable()
+        if available:
+            record("system tray is available", True)
+        else:
+            note("system tray is not available on this runner "
+                 "(no interactive shell) -- tray behaviour not verified here")
+    except Exception as exc:  # noqa: BLE001
+        note(f"tray availability not verifiable on this runner: {exc}")
+
     # The desktop layer must still attach (or report honestly why not).
     try:
         from app.platform.windows.desktop_window import (
@@ -692,6 +706,9 @@ def check_platform_regressions():
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
+ANNOTATE_FILTER = None
+
+
 def _esc(text):
     """Escape a string for use in a GitHub workflow command."""
     return (text.replace("%", "%25")
@@ -726,8 +743,16 @@ def emit_annotations():
                f"{len(failed)} failed, {len(RESULTS)} total")
     print("::warning title=phase6d1-SUMMARY::" + _esc(summary))
 
-    # One small annotation per check, in order.
-    for index, (name, ok, detail) in enumerate(RESULTS, start=1):
+    # One small annotation per check, in order.  GitHub only returns a handful
+    # of annotations per check-run, so a second run can narrow the set with
+    # --annotate <substring> to surface the checks that were truncated away.
+    shown = RESULTS
+    if ANNOTATE_FILTER:
+        shown = [r for r in RESULTS if ANNOTATE_FILTER.lower() in r[0].lower()]
+        print(f"::warning title=phase6d1-FILTER::"
+              + _esc(f"annotating {len(shown)} of {len(RESULTS)} checks "
+                     f"matching {ANNOTATE_FILTER!r}"))
+    for index, (name, ok, detail) in enumerate(shown, start=1):
         text = f"[{'PASS' if ok else 'FAIL'}] {name}"
         if detail:
             text += f" -- {detail}"
@@ -778,4 +803,6 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--annotate" in sys.argv:
+        ANNOTATE_FILTER = sys.argv[sys.argv.index("--annotate") + 1]
     sys.exit(main())

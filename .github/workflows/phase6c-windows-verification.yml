@@ -46,8 +46,8 @@ jobs:
             Format-List | Out-String).Trim() | Out-File -Append artifacts\env.txt
           "=== Python ===" | Out-File -Append artifacts\env.txt
           python -V | Out-File -Append artifacts\env.txt
-          "=== PySide6 ===" | Out-File -Append artifacts\env.txt
-          python -c "import PySide6; print('PySide6', PySide6.__version__)" |
+          "=== PySide6 (not installed in this job) ===" | Out-File -Append artifacts\env.txt
+          python -c "import PySide6; print('PySide6', PySide6.__version__)" 2>&1 |
             Out-File -Append artifacts\env.txt
           "=== Displays ===" | Out-File -Append artifacts\env.txt
           Add-Type -AssemblyName System.Windows.Forms
@@ -56,12 +56,18 @@ jobs:
           } | Out-File -Append artifacts\env.txt
           Get-Content artifacts\env.txt
 
+      # Results come back as check-run annotations: the Actions log host and
+      # artifact blob storage are unreachable from the driving sandbox and the
+      # Actions GITHUB_TOKEN is read-only in this repository.
       - name: Publish backend results
         if: always()
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python phase6c_publish.py backend-suite artifacts/backend_suite.txt
+
+      - name: Publish environment snapshot
+        if: always()
+        shell: pwsh
+        run: python phase6c_publish.py environment artifacts/env.txt
 
       - name: Upload verification artifacts
         if: always()
@@ -96,6 +102,25 @@ jobs:
             Tee-Object -FilePath artifacts\shape_tests.txt
           "EXIT=$LASTEXITCODE" | Out-File -Append artifacts\shape_tests.txt
 
+      - name: Environment snapshot
+        shell: pwsh
+        run: |
+          "=== OS ===" | Out-File artifacts\env.txt
+          (Get-CimInstance Win32_OperatingSystem |
+            Select-Object Caption, Version, BuildNumber, OSArchitecture |
+            Format-List | Out-String).Trim() | Out-File -Append artifacts\env.txt
+          "=== Python ===" | Out-File -Append artifacts\env.txt
+          python -V | Out-File -Append artifacts\env.txt
+          "=== PySide6 ===" | Out-File -Append artifacts\env.txt
+          python -c "import PySide6; print('PySide6', PySide6.__version__)" |
+            Out-File -Append artifacts\env.txt
+          "=== Displays ===" | Out-File -Append artifacts\env.txt
+          Add-Type -AssemblyName System.Windows.Forms
+          [System.Windows.Forms.Screen]::AllScreens | ForEach-Object {
+            "$($_.DeviceName) $($_.Bounds.Width)x$($_.Bounds.Height) primary=$($_.Primary)"
+          } | Out-File -Append artifacts\env.txt
+          Get-Content artifacts\env.txt
+
       - name: Windows shape verification
         continue-on-error: true
         shell: pwsh
@@ -105,19 +130,25 @@ jobs:
           "EXIT=$LASTEXITCODE" | Out-File -Append artifacts\verification.log
           Get-ChildItem artifacts
 
-      - name: Publish verification results
+      - name: Publish verification report
         if: always()
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python phase6c_publish.py windows-shape artifacts/report.json
+        run: python phase6c_publish.py report artifacts/report.json
 
       - name: Publish verification log
         if: always()
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python phase6c_publish.py windows-shape-log artifacts/verification.log
+        run: python phase6c_publish.py verification-log artifacts/verification.log
+
+      - name: Publish shape tests
+        if: always()
+        shell: pwsh
+        run: python phase6c_publish.py shape-tests artifacts/shape_tests.txt
+
+      - name: Publish environment snapshot
+        if: always()
+        shell: pwsh
+        run: python phase6c_publish.py environment artifacts/env.txt
 
       - name: Upload verification artifacts
         if: always()

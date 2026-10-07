@@ -563,8 +563,12 @@ if __name__ == "__main__":
         sys.stdout.write(
             f"::notice title=Phase6E summary::{len(RESULTS)} checks, "
             f"{sum(1 for r in RESULTS if not r[1])} failed, "
-            f"{len(LOG)} log lines, exit={CODE}\n")
+            f"{len(LOG)} log lines, exit={CODE} filter={ann or '(none)'}\n")
         for line in sorted(LOG, key=_rank):
+            # GitHub returns only ~10 annotations per check-run, so --annotate
+            # restricts a run to one subset and a second run recovers the rest.
+            if ann and not any(sub in line for sub in ann):
+                continue
             body = line.replace("::", ":").replace("\r", " ")[:240]
             lvl = "error" if _rank(line) <= 1 else "notice"
             sys.stdout.write(f"::{lvl} title=Phase6E::{body}\n")

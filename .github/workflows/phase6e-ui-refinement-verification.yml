@@ -66,3 +66,25 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Phase 6E verification (pass 2) reported failures" }
         env:
           QT_QPA_PLATFORM: windows
+
+      # Pass 3 -- the Phase 6E stylesheet fixes themselves.
+      - name: Phase 6E verification (stylesheet fixes)
+        shell: pwsh
+        run: |
+          $env:PYTHONIOENCODING = "utf-8"
+          $env:PYTHONUTF8 = "1"
+          python scripts/verify_phase6e_ui_refinement.py --annotate "qss"
+          if ($LASTEXITCODE -ne 0) { throw "Phase 6E verification (pass 3) reported failures" }
+        env:
+          QT_QPA_PLATFORM: windows
+
+      # Pass 4 -- the remaining platform checks.
+      - name: Phase 6E verification (platform remainder)
+        shell: pwsh
+        run: |
+          $env:PYTHONIOENCODING = "utf-8"
+          $env:PYTHONUTF8 = "1"
+          python scripts/verify_phase6e_ui_refinement.py --annotate "geometry_persistence,desktop_layer,priority_selector_popup,priority_context_menu,edit_dialog_feels,history_is_read_only,tray_available,dpi_reported"
+          if ($LASTEXITCODE -ne 0) { throw "Phase 6E verification (pass 4) reported failures" }
+        env:
+          QT_QPA_PLATFORM: windows

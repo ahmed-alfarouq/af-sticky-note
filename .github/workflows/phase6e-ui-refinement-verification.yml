@@ -3,10 +3,14 @@ name: phase6e-ui-refinement-verification
 # Temporary real-Windows verification for the Phase 6E UI/UX refinement audit.
 # Deleted once the results have been captured (Phase 6C / 6D.1 precedent).
 #
-# Everything is folded into ONE script and ONE step: a failing separate step
-# skips every later step and loses the whole report, and
-# `continue-on-error: true` would report `success` even when the script
-# exits non-zero.
+# Everything is folded into ONE script and ONE step:
+#   * a failing separate step skips every later step and loses the report;
+#   * `continue-on-error: true` would report `success` even when the script
+#     exits non-zero, which reads as a false "verification passed";
+#   * the log/artifact endpoints redirect to Azure blob storage and are
+#     unreachable from the authoring sandbox, so the script re-emits its whole
+#     log as GitHub Actions annotations (failures first) from a `finally`
+#     block, which is the only channel that survives.
 
 on:
   workflow_dispatch:
@@ -42,19 +46,5 @@ jobs:
           $env:PYTHONUTF8 = "1"
           python scripts/verify_phase6e_ui_refinement.py
           if ($LASTEXITCODE -ne 0) { throw "Phase 6E verification reported failures" }
-        env:
-          QT_QPA_PLATFORM: windows
-
-      - name: Phase 6E verification (filtered second pass)
-        # GitHub truncates multi-part annotations and returns only ~10 per
-        # check-run; the first pass therefore re-emits a subset so nothing is
-        # lost. `--annotate` is a comma-separated substring filter.
-        if: always()
-        shell: pwsh
-        run: |
-          $env:PYTHONIOENCODING = "utf-8"
-          $env:PYTHONUTF8 = "1"
-          python scripts/verify_phase6e_ui_refinement.py --annotate "qss,paper,mask,desktop,taskbar,geometry"
-          if ($LASTEXITCODE -ne 0) { throw "Phase 6E verification (pass 2) reported failures" }
         env:
           QT_QPA_PLATFORM: windows

@@ -34,11 +34,25 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 RESULTS = []
+#: Every line the script prints, in order.  GitHub Actions annotations are the
+#: ONLY channel that survives this sandbox (log/artifact endpoints redirect to
+#: Azure blob storage, which is TCP-blocked), so the whole log is re-emitted as
+#: annotations -- failures first -- even when the script crashes.
+LOG: list = []
+
+
+def _emit(line: str) -> None:
+    LOG.append(line)
+    try:
+        sys.stdout.write(line + "\n")
+        sys.stdout.flush()
+    except Exception:
+        pass
 
 
 def record(name: str, ok: bool, detail: str = "") -> None:
     RESULTS.append((name, ok, detail))
-    print(f"CHECK {name} {'PASS' if ok else 'FAIL'} {detail}", flush=True)
+    _emit(f"CHECK {name} {'PASS' if ok else 'FAIL'} {detail}")
 
 
 def guard(name: str):
@@ -48,8 +62,9 @@ def guard(name: str):
             try:
                 return fn(*a, **kw)
             except Exception:
-                traceback.print_exc()
-                record(name, False, "exception (see traceback above)")
+                for line in traceback.format_exc().splitlines():
+                    _emit("TRACE " + line)
+                record(name, False, "exception (see TRACE lines)")
                 return None
         return inner
     return wrap
@@ -64,8 +79,7 @@ def main() -> int:
     only = [s for s in args.only.split(",") if s]
     ann = [s for s in args.annotate.split(",") if s]
 
-    from PySide6.QtCore import Qt
-    from PySide6.QtCore import QPoint
+    from PySide6.QtCore import QPoint, Qt, qVersion
     from PySide6.QtGui import QColor, QImage, QPainter
     from PySide6.QtWidgets import (
         QApplication,
@@ -74,6 +88,10 @@ def main() -> int:
         QLineEdit,
         QPushButton,
     )
+
+    _emit("START Phase6E harness "
+          f"platform={sys.platform} python={sys.version.split()[0]} "
+          f"qt={qVersion()}")
 
     app = QApplication(sys.argv)
     app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
@@ -499,17 +517,37 @@ def main() -> int:
     for name, ok, detail in failed:
         print(f"FAILED: {name} :: {detail}", flush=True)
 
-    if ann:
-        ordered = failed + [r for r in RESULTS if r[1]]
-        for name, ok, detail in ordered:
-            if not any(s in name for s in ann):
-                continue
-            level = "error" if not ok else "notice"
-            print(f"::{level} title=Phase6E {name}::{name} :: "
-                  f"{'FAIL' if not ok else 'PASS'} {detail}", flush=True)
-
     return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    CODE = 0
+    try:
+        CODE = main()
+    except Exception:
+        for line in traceback.format_exc().splitlines():
+            sys.stdout.write("FATAL " + line + "\n")
+        CODE = 1
+    finally:
+        # Report whatever we managed to collect, even on a hard crash.
+        # Failures rank first: GitHub truncates multi-part annotations and
+        # returns only ~10 per check-run, so the problems must come first.
+        def _rank(line: str) -> int:
+            if " FAIL " in line or line.startswith(("TRACE", "FATAL")):
+                return 0
+            if line.startswith("FAILED"):
+                return 1
+            if line.startswith("START"):
+                return 2
+            return 3
+
+        sys.stdout.write(
+            f"::notice title=Phase6E summary::{len(RESULTS)} checks, "
+            f"{sum(1 for r in RESULTS if not r[1])} failed, "
+            f"{len(LOG)} log lines, exit={CODE}\n")
+        for line in sorted(LOG, key=_rank):
+            body = line.replace("::", ":").replace("\r", " ")[:240]
+            lvl = "error" if _rank(line) <= 1 else "notice"
+            sys.stdout.write(f"::{lvl} title=Phase6E::{body}\n")
+        sys.stdout.flush()
+    sys.exit(CODE)

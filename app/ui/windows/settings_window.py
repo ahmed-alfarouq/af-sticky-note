@@ -40,7 +40,6 @@ class SettingsWindow(QDialog):
         self._startup_manager = startup_manager
 
         self.setWindowTitle("الإعدادات")
-        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.resize(360, 240)
         self.setMinimumSize(320, 200)
 

@@ -26,10 +26,10 @@ one fill plus one stroke and no geometry or region work.
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional, Sequence, Tuple
+from typing import Any, Callable, Optional, Protocol, Sequence, Tuple
 
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QIcon, QMouseEvent
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 
 from app.config.settings import APP_NAME
 from app.core.models import Day, Task, TaskPriority
+from app.core.services.history_service import HistoryService
 from app.core.services.task_service import TaskService
 from app.infrastructure.paths import get_logo_path
 from app.ui.geometry_manager import WindowGeometryManager
@@ -54,6 +55,16 @@ from app.ui.widgets.task_input import TaskInput
 from app.ui.widgets.task_list import TaskList
 
 logger = logging.getLogger(__name__)
+
+
+class StartupManager(Protocol):
+    """Operations required by the Settings dialog's startup controls."""
+
+    def is_enabled(self) -> bool: ...
+
+    def enable(self) -> Any: ...
+
+    def disable(self) -> Any: ...
 
 
 class MainWindow(QMainWindow):
@@ -70,8 +81,8 @@ class MainWindow(QMainWindow):
         task_service: TaskService,
         initial_tasks: Sequence[Task] = (),
         geometry_manager: Optional[WindowGeometryManager] = None,
-        history_service: Optional[object] = None,
-        startup_manager: Optional[object] = None,
+        history_service: Optional[HistoryService] = None,
+        startup_manager: Optional[StartupManager] = None,
         on_exit_requested: Optional[Callable[[], None]] = None,
         parent: Optional[QWidget] = None,
     ) -> None:

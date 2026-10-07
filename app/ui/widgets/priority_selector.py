@@ -27,7 +27,6 @@ class PrioritySelector(QComboBox):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("prioritySelector")
-        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.setAccessibleName("أولوية المهمة")
         self.setAccessibleDescription("اختر أولوية المهمة: عاجل أو عادي أو منخفض")
         self.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)

@@ -94,7 +94,6 @@ class TaskList(QScrollArea):
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         """Show list context menu offering 'Open History', 'Settings', and 'Clear completed'."""
         menu = QMenu(self)
-        menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
 
         history_action = QAction("فتح السجل", menu)
         history_action.triggered.connect(self.history_requested.emit)

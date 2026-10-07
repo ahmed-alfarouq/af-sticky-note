@@ -8,7 +8,7 @@ window is never restored off-screen.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, cast
 
 try:
     from PySide6.QtCore import QPoint, QRect, QSettings, QSize
@@ -118,7 +118,7 @@ class WindowGeometryManager:
         if QGuiApplication is not None:
             app = QGuiApplication.instance()
             if app is not None and hasattr(app, "primaryScreen"):
-                screen = app.primaryScreen()
+                screen = QGuiApplication.primaryScreen()
                 if screen is not None:
                     work_area = screen.availableGeometry()
                     # Place in top-right with margin
@@ -139,10 +139,12 @@ class WindowGeometryManager:
             return True
 
         app = QGuiApplication.instance()
-        if app is None or not hasattr(app, "screens"):
+        if app is None:
             return True
 
-        screens = app.screens()
+        # QGuiApplication.instance() is typed as QCoreApplication by some
+        # Qt stubs, so call screens() on the class instead.
+        screens = QGuiApplication.screens()
         if not screens:
             return True
 

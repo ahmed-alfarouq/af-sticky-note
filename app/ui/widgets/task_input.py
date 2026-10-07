@@ -19,6 +19,7 @@ class TaskInput(QLineEdit):
         self.setAccessibleName("حقل إدخال مهمة جديدة")
         self.setAccessibleDescription("اكتب نص المهمة واضغط زر الإدخال لإضافتها")
         self.returnPressed.connect(self._on_return_pressed)
+        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
 
     def _on_return_pressed(self) -> None:
         text = self.text()

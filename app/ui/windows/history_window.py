@@ -180,8 +180,11 @@ class HistoryWindow(QDialog):
         # Clear existing items in task layout
         while self._task_layout.count() > 0:
             child = self._task_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
+            if child is None:
+                continue
+            widget = child.widget()
+            if widget is not None:
+                widget.deleteLater()
 
         # Populate tasks (strictly read-only)
         if not history_view.tasks:

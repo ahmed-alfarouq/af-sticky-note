@@ -25,7 +25,7 @@ from typing import Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QRegion
-from PySide6.QtWidgets import QFrame
+from PySide6.QtWidgets import QFrame, QWidget
 
 from app.ui.note_shape import NoteShape, inset_note_shape
 from app.ui.styles.app_style import COLOR_STICKY_BORDER, COLOR_STICKY_PAPER
@@ -76,7 +76,7 @@ class PaperSurface(QFrame):
     done here, along the shared shape).
     """
 
-    def __init__(self, parent: Optional[object] = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("stickyNoteFrame")
         # Never let a background brush fill the rectangular frame behind the

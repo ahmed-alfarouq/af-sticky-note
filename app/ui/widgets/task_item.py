@@ -54,7 +54,6 @@ class TaskItem(QFrame):
         status_text = "مكتملة" if task.is_completed else "غير مكتملة"
         self.setAccessibleDescription(f"الحالة: {status_text}")
 
-        # Checkbox first on the right in RTL, followed by text next to it
         layout.addWidget(self._checkbox)
         layout.addWidget(self._text_label, 1)
 
@@ -86,7 +85,9 @@ class TaskItem(QFrame):
 
         if self._priority_badge is None:
             self._priority_badge = QLabel(self)
-            self.layout().addWidget(self._priority_badge)
+            layout = self.layout()
+            if layout is not None:
+                layout.addWidget(self._priority_badge)
 
         self._priority_badge.setText(PRIORITY_LABELS[priority])
         self._priority_badge.setObjectName(
@@ -136,7 +137,6 @@ class TaskItem(QFrame):
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         """Show context menu for editing, changing priority, or deleting."""
         menu = QMenu(self)
-        menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
 
         edit_action = QAction("تعديل المهمة", menu)
         edit_action.triggered.connect(lambda: self.edit_requested.emit(self.task_id))
@@ -144,7 +144,6 @@ class TaskItem(QFrame):
 
         # Priority submenu: checkable actions, current priority checked.
         priority_menu = QMenu("الأولوية", menu)
-        priority_menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         priority_group = QActionGroup(menu)
         priority_group.setExclusive(True)
 

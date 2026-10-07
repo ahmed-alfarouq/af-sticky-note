@@ -127,8 +127,6 @@ def bootstrap_application(app: QApplication) -> MainWindow:
             on_exit_requested=_on_app_exit_requested,
             parent=window,
         )
-        # Update adapter tray controller reference
-        platform_adapter._tray_controller = tray
         tray.show()
         app.aboutToQuit.connect(tray.hide)
 
@@ -154,7 +152,6 @@ def bootstrap_application(app: QApplication) -> MainWindow:
         day_repo=day_repo,
         task_service=task_service,
         main_window=window,
-        parent=window,
     )
     app.aboutToQuit.connect(coordinator.cleanup)
 

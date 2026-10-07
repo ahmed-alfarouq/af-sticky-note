@@ -34,10 +34,12 @@ try:  # pragma: no cover - environment dependent
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import (
         QApplication,
+        QCheckBox,
         QComboBox,
         QHBoxLayout,
         QLabel,
         QLineEdit,
+        QPushButton,
         QWidget,
     )
 
@@ -101,6 +103,39 @@ def test_no_qproperty_declaration_uses_dotted_qt_syntax():
             f"line {line_number}: the dotted 'Qt.X' form is not valid QSS -- "
             f"use the bare enum name, quoted when it is a combination: {declaration}"
         )
+
+
+def test_no_fractional_font_size():
+    """Every ``font-size`` must be a whole number of pixels (Phase 6E).
+
+    Qt's QSS parser silently discards a fractional ``font-size`` -- no
+    ``Could not parse application stylesheet`` warning, no exception, the
+    widget just keeps the platform default (9pt, ``pixelSize() == -1``).
+    Measured on Qt 6.7.2::
+
+        font-size: 13px    -> font().pixelSize() == 13
+        font-size: 13.5px  -> font().pixelSize() == -1
+
+    Two rules shipped with ``13.5px`` (the daily quote and the task input),
+    so the hero text of the note and the field you type into both rendered
+    smaller than the task rows.  This guard is deliberately *static* so it
+    also runs in the backend suite, where PySide6 is absent.
+    """
+    import re
+
+    pattern = re.compile(r"font-size\s*:\s*([0-9]*\.?[0-9]+)px")
+    offenders = []
+    for number, line in enumerate(get_application_stylesheet().splitlines(), start=1):
+        for match in pattern.finditer(line):
+            if "." in match.group(1):
+                offenders.append((number, line.strip()))
+
+    assert not offenders, (
+        "a fractional font-size is silently dropped by Qt's QSS parser (the "
+        "widget keeps the platform default and no warning is emitted) -- use "
+        "a whole number of pixels: "
+        + "; ".join(f"line {n}: {t}" for n, t in offenders)
+    )
 
 
 # ===========================================================================
@@ -299,4 +334,60 @@ def test_stylesheet_keeps_the_priority_badges_secondary():
     finally:
         for badge in badges:
             badge.close()
+        app.setStyleSheet("")
+
+
+# ===========================================================================
+# 3. Objects that used to fall back to platform-default Qt styling (Phase 6E)
+# ===========================================================================
+#: ``objectName -> widget factory`` for every styled object that the audit
+#: found rendering at Qt's default font.  ``font().pixelSize()`` is the
+#: reliable discriminator: it stays -1 unless QSS actually set a size, and
+#: it cannot be confused by QStyle's polish cache.
+_STYLED_OBJECTS = [
+    ("quoteTextLabel", lambda: QLabel("حكمة")),
+    ("taskInputField", lambda: QLineEdit("مهمة")),
+    ("taskEditLabel", lambda: QLabel("نص المهمة:")),
+    ("saveButton", lambda: QPushButton("حفظ")),
+    ("cancelButton", lambda: QPushButton("إلغاء")),
+    ("historyDualDate", lambda: QLabel("27 سبتمبر 2026")),
+    ("historyStatsLabel", lambda: QLabel("التقدم: 1 من 3")),
+]
+
+
+def test_every_styled_object_gets_a_real_font_size():
+    """Each named object must receive a font size from the sheet.
+
+    A widget whose ``objectName`` has no matching rule keeps Qt's default
+    font (``pixelSize() == -1``).  The eight objects listed here all shipped
+    that way: the daily quote and the task input because ``font-size`` was a
+    fractional ``13.5px``, the other six because no rule named them at all,
+    which is what made the edit dialog, the history summary and the settings
+    checkbox look like stock Qt.
+    """
+    if _skip_without_qt():
+        return
+    app = _qt_app()
+    app.setStyleSheet("QLabel#__qss_probe_marker { color: #000000; }")
+
+    probes = []
+    try:
+        app.setStyleSheet(get_application_stylesheet())
+        for object_name, factory in _STYLED_OBJECTS:
+            widget = factory()
+            widget.setObjectName(object_name)
+            widget.show()
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            probes.append(widget)
+
+            assert widget.font().pixelSize() > 0, (
+                f"#{object_name} still renders at Qt's default font "
+                f"(pixelSize={widget.font().pixelSize()}, "
+                f"pointSize={widget.font().pointSize()}) -- the stylesheet "
+                "names this object but sets no font-size for it"
+            )
+    finally:
+        for widget in probes:
+            widget.close()
         app.setStyleSheet("")

@@ -147,8 +147,12 @@ def get_application_stylesheet() -> str:
     }}
 
     QLabel#quoteTextLabel {{
+        /* Keep this value an integer number of pixels: Qt's QSS parser
+           silently discards a fractional font-size (13.5px renders at the
+           platform default, ~9pt) and emits no warning at all
+           (tests/test_app_stylesheet.py). */
+        font-size: 13px;
         color: {COLOR_TEXT_PRIMARY};
-        font-size: 13.5px;
         font-weight: 500;
         line-height: 1.55;
         font-style: italic;
@@ -317,12 +321,17 @@ def get_application_stylesheet() -> str:
         /* Keep this value quoted: an unquoted pipe makes Qt's QSS parser
            discard this entire stylesheet (tests/test_app_stylesheet.py). */
         qproperty-alignment: 'AlignRight | AlignVCenter';
+        /* Keep this value an integer number of pixels: Qt's QSS parser
+           silently discards a fractional font-size (13.5px renders at the
+           platform default, ~9pt) and emits no warning at all
+           (tests/test_app_stylesheet.py). The typed task text must not be
+           smaller than the same text once it becomes a task row. */
+        font-size: 13px;
         background-color: {COLOR_INPUT_BG};
         color: {COLOR_TEXT_PRIMARY};
         border: 1.5px solid {COLOR_CARD_BORDER};
         border-radius: 8px;
         padding: 9px 14px;
-        font-size: 13.5px;
     }}
 
     QLineEdit#taskInputField:hover {{
@@ -367,6 +376,24 @@ def get_application_stylesheet() -> str:
         background-color: #1E2738;
         color: {COLOR_TEXT_PRIMARY};
         border-color: {COLOR_SOFT};
+    }}
+
+    /* History window: the dual-calendar date and the progress summary are the
+       two most informative lines in the window. They carry object names but
+       had no rules, so they rendered at the platform default size while every
+       neighbouring control used 12-13px. */
+    QLabel#historyDualDate {{
+        color: {COLOR_SOFT};
+        font-size: 13px;
+        font-weight: 600;
+        background: transparent;
+    }}
+
+    QLabel#historyStatsLabel {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 12px;
+        font-weight: 500;
+        background: transparent;
     }}
 
     QPushButton#historyNavButton:disabled {{
@@ -420,6 +447,66 @@ def get_application_stylesheet() -> str:
 
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
         height: 0px;
+    }}
+
+    /* Task edit dialog (Phase 6E). These three object names were set in code
+       but had no rules, so the dialog's field labels and both action buttons
+       fell back to platform-default Qt widgets. Save is the primary action
+       and uses the palette's trust blue; Cancel stays neutral like the other
+       dialog close buttons. */
+    QLabel#taskEditLabel {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 13px;
+        font-weight: 500;
+        background: transparent;
+    }}
+
+    QPushButton#saveButton {{
+        background-color: {COLOR_TRUST};
+        color: #FFFFFF;
+        border: 1px solid {COLOR_TRUST};
+        border-radius: 6px;
+        padding: 6px 18px;
+        font-size: 13px;
+        font-weight: 600;
+    }}
+
+    QPushButton#saveButton:hover {{
+        background-color: #5D8DBE;
+        border-color: #5D8DBE;
+    }}
+
+    QPushButton#saveButton:pressed {{
+        background-color: #436E9B;
+        border-color: #436E9B;
+    }}
+
+    QPushButton#cancelButton {{
+        background-color: {COLOR_CARD_SURFACE};
+        color: {COLOR_TEXT_PRIMARY};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 6px;
+        padding: 6px 18px;
+        font-size: 13px;
+        font-weight: 500;
+    }}
+
+    QPushButton#cancelButton:hover {{
+        background-color: #1E2738;
+        border-color: {COLOR_FOCUS_RING};
+    }}
+
+    QPushButton#cancelButton:pressed {{
+        background-color: #141B26;
+    }}
+
+    /* Settings window: the startup checkbox text had no rule, so it rendered
+       at the platform default size next to a 13px app title. The indicator
+       itself is already covered by the generic QCheckBox rules above. */
+    QCheckBox#startupCheckbox {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: 13px;
+        font-weight: 500;
     }}
     """
 

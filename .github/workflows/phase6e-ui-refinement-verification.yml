@@ -1,0 +1,60 @@
+name: phase6e-ui-refinement-verification
+
+# Temporary real-Windows verification for the Phase 6E UI/UX refinement audit.
+# Deleted once the results have been captured (Phase 6C / 6D.1 precedent).
+#
+# Everything is folded into ONE script and ONE step: a failing separate step
+# skips every later step and loses the whole report, and
+# `continue-on-error: true` would report `success` even when the script
+# exits non-zero.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/01a0e01c-af-sticky-note
+    paths:
+      - "app/ui/**"
+      - "tests/**"
+      - ".github/workflows/phase6e-ui-refinement-verification.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PySide6
+        run: python -m pip install --quiet "PySide6==6.7.2"
+
+      - name: Phase 6E real-Windows verification
+        shell: pwsh
+        run: |
+          $env:PYTHONIOENCODING = "utf-8"
+          $env:PYTHONUTF8 = "1"
+          python scripts/verify_phase6e_ui_refinement.py
+          if ($LASTEXITCODE -ne 0) { throw "Phase 6E verification reported failures" }
+        env:
+          QT_QPA_PLATFORM: windows
+
+      - name: Phase 6E verification (filtered second pass)
+        # GitHub truncates multi-part annotations and returns only ~10 per
+        # check-run; the first pass therefore re-emits a subset so nothing is
+        # lost. `--annotate` is a comma-separated substring filter.
+        if: always()
+        shell: pwsh
+        run: |
+          $env:PYTHONIOENCODING = "utf-8"
+          $env:PYTHONUTF8 = "1"
+          python scripts/verify_phase6e_ui_refinement.py --annotate "qss,paper,mask,desktop,taskbar,geometry"
+          if ($LASTEXITCODE -ne 0) { throw "Phase 6E verification (pass 2) reported failures" }
+        env:
+          QT_QPA_PLATFORM: windows

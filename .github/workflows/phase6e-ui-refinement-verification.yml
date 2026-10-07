@@ -11,6 +11,10 @@ name: phase6e-ui-refinement-verification
 #     unreachable from the authoring sandbox, so the script re-emits its whole
 #     log as GitHub Actions annotations (failures first) from a `finally`
 #     block, which is the only channel that survives.
+#
+# GitHub returns only ~10 annotations per check-run, so the same script runs
+# several times with a different `--annotate` substring filter to recover the
+# full set of PASS lines. Each pass re-verifies the product from scratch.
 
 on:
   workflow_dispatch:
@@ -41,12 +45,24 @@ jobs:
       - name: Install PySide6
         run: python -m pip install --quiet "PySide6==6.7.2"
 
-      - name: Phase 6E real-Windows verification
+      # Pass 1 -- the paper, window and platform layer.
+      - name: Phase 6E verification (paper and platform)
         shell: pwsh
         run: |
           $env:PYTHONIOENCODING = "utf-8"
           $env:PYTHONUTF8 = "1"
-          python scripts/verify_phase6e_ui_refinement.py
-          if ($LASTEXITCODE -ne 0) { throw "Phase 6E verification reported failures" }
+          python scripts/verify_phase6e_ui_refinement.py --annotate "paper,mask,flags,taskbar,geometry,desktop,resize,explorer,minimum,START,summary"
+          if ($LASTEXITCODE -ne 0) { throw "Phase 6E verification (pass 1) reported failures" }
+        env:
+          QT_QPA_PLATFORM: windows
+
+      # Pass 2 -- the interaction and styling checks.
+      - name: Phase 6E verification (interaction and styling)
+        shell: pwsh
+        run: |
+          $env:PYTHONIOENCODING = "utf-8"
+          $env:PYTHONUTF8 = "1"
+          python scripts/verify_phase6e_ui_refinement.py --annotate "task,selector,priority,edit,history,settings,tray,dpi,qss"
+          if ($LASTEXITCODE -ne 0) { throw "Phase 6E verification (pass 2) reported failures" }
         env:
           QT_QPA_PLATFORM: windows

@@ -46,6 +46,9 @@ RESULTS = []
 #: Azure blob storage, which is TCP-blocked), so the whole log is re-emitted as
 #: annotations -- failures first -- even when the script crashes.
 LOG: list = []
+#: Populated by main(); read by the module-level reporting block so a crash
+#: still honours the --annotate filter.
+ANNOTATE_FILTER: list = []
 
 
 def _emit(line: str) -> None:
@@ -85,6 +88,8 @@ def main() -> int:
     args = ap.parse_args()
     only = [s for s in args.only.split(",") if s]
     ann = [s for s in args.annotate.split(",") if s]
+    global ANNOTATE_FILTER
+    ANNOTATE_FILTER = ann
 
     from PySide6.QtCore import QPoint, Qt, qVersion
     from PySide6.QtGui import QColor, QImage, QPainter
@@ -563,11 +568,14 @@ if __name__ == "__main__":
         sys.stdout.write(
             f"::notice title=Phase6E summary::{len(RESULTS)} checks, "
             f"{sum(1 for r in RESULTS if not r[1])} failed, "
-            f"{len(LOG)} log lines, exit={CODE} filter={ann or '(none)'}\n")
+            f"{len(LOG)} log lines, exit={CODE} "
+            f"filter={ANNOTATE_FILTER or '(none)'}\n")
         for line in sorted(LOG, key=_rank):
             # GitHub returns only ~10 annotations per check-run, so --annotate
             # restricts a run to one subset and a second run recovers the rest.
-            if ann and not any(sub in line for sub in ann):
+            if ANNOTATE_FILTER and not any(
+                sub in line for sub in ANNOTATE_FILTER
+            ):
                 continue
             body = line.replace("::", ":").replace("\r", " ")[:240]
             lvl = "error" if _rank(line) <= 1 else "notice"

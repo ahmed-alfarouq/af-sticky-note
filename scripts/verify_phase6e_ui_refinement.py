@@ -25,6 +25,13 @@ import ctypes
 import os
 import sys
 import traceback
+from pathlib import Path
+
+# Running this file as a script puts scripts/ on sys.path, not the repo root,
+# so `import app...` fails on a clean runner.  Bootstrap it explicitly.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 # A cp1252 console cannot encode the Arabic strings used throughout the UI.
 for _stream in (sys.stdout, sys.stderr):

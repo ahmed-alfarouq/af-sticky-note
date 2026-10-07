@@ -19,7 +19,9 @@ on:
       - arena/01a0e01c-af-sticky-note
     paths:
       - "app/ui/**"
+      - "app/platform/**"
       - "tests/**"
+      - "scripts/**"
       - ".github/workflows/phase6e-ui-refinement-verification.yml"
 
 permissions:

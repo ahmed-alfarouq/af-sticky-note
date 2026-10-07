@@ -93,22 +93,33 @@ def main() -> int:
           f"platform={sys.platform} python={sys.version.split()[0]} "
           f"qt={qVersion()}")
 
+    _emit("STEP importing PySide6.QtWidgets.QApplication")
     app = QApplication(sys.argv)
     app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+    _emit("STEP QApplication created")
 
     from app.core.models import Day, TaskPriority
+    _emit("STEP imported models")
     from app.core.services.task_service import TaskService
+    _emit("STEP imported task_service")
     from app.database.connection import create_connection
     from app.database.day_repository import DayRepository
     from app.database.migrations import apply_migrations
     from app.database.task_repository import TaskRepository
+    _emit("STEP imported database")
     from app.ui.styles.app_style import get_application_stylesheet
+    _emit("STEP imported app_style")
     from app.ui.widgets.task_edit_dialog import TaskEditDialog
+    _emit("STEP imported task_edit_dialog")
     from app.ui.windows.history_window import HistoryWindow
+    _emit("STEP imported history_window")
     from app.ui.windows.main_window import MainWindow
+    _emit("STEP imported main_window")
     from app.ui.windows.settings_window import SettingsWindow
+    _emit("STEP imported settings_window")
 
     SHEET = get_application_stylesheet()
+    _emit("STEP stylesheet built")
 
     # ---------------------------------------------------------------- fixtures
     class Geom:
@@ -526,7 +537,8 @@ if __name__ == "__main__":
         CODE = main()
     except Exception:
         for line in traceback.format_exc().splitlines():
-            sys.stdout.write("FATAL " + line + "\n")
+            _emit("FATAL " + line)
+            sys.stdout.write(f"::error title=Phase6E crash::{line[:240]}\n")
         CODE = 1
     finally:
         # Report whatever we managed to collect, even on a hard crash.

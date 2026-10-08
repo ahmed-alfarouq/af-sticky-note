@@ -23,10 +23,12 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from app.config.settings import APP_NAME, ORG_NAME
 from app.core.services.daily_lifecycle_coordinator import DailyLifecycleCoordinator
 from app.core.services.daily_rollover_service import DailyRolloverService
+from app.core.services.category_service import CategoryService
 from app.core.services.quote_import_service import QuoteImportService
 from app.core.services.quote_service import NoAvailableQuotesError, QuoteService
 from app.core.services.task_service import TaskService
 from app.database.connection import create_connection
+from app.database.category_repository import CategoryRepository
 from app.database.day_repository import DayRepository
 from app.database.migrations import MigrationError, apply_migrations
 from app.database.quote_repository import QuoteRepository
@@ -37,6 +39,7 @@ from app.infrastructure.clock import local_today_iso
 from app.infrastructure.fonts import load_application_fonts
 from app.infrastructure.paths import get_database_path, get_fonts_dir, get_quotes_path
 from app.platform import get_platform_adapter
+from app.ui.category_icons import CategoryIconProvider
 from app.ui.windows.main_window import MainWindow
 
 logger = logging.getLogger(__name__)
@@ -60,12 +63,14 @@ def bootstrap_application(app: QApplication) -> MainWindow:
     # Repositories
     day_repo = DayRepository(conn)
     task_repo = TaskRepository(conn)
+    category_repo = CategoryRepository(conn)
     quote_repo = QuoteRepository(conn)
     quote_usage_repo = QuoteUsageRepository(conn)
     rotation_repo = QuoteRotationStateRepository(conn)
 
     # Services
-    task_service = TaskService(task_repo=task_repo)
+    task_service = TaskService(task_repo=task_repo, category_repo=category_repo)
+    category_service = CategoryService(category_repo=category_repo)
     quote_import_service = QuoteImportService(quote_repo=quote_repo)
     quote_service = QuoteService(
         conn=conn,
@@ -115,6 +120,8 @@ def bootstrap_application(app: QApplication) -> MainWindow:
         history_service=history_service,
         startup_manager=platform_adapter.startup_manager,
         on_exit_requested=_on_app_exit_requested,
+        category_service=category_service,
+        icon_provider=CategoryIconProvider(),
     )
 
     # 5. Initialize system tray if on Windows adapter and attach to desktop layer if supported

@@ -75,6 +75,7 @@ def _make_task(
     position: int = 0,
     priority: TaskPriority = TaskPriority.MEDIUM,
     source_task_id: Optional[int] = None,
+    category_id: str = "general",
 ) -> Task:
     return Task(
         id=task_id,
@@ -86,6 +87,7 @@ def _make_task(
         updated_at="2026-09-27T00:00:00",
         priority=priority,
         source_task_id=source_task_id,
+        category_id=category_id,
     )
 
 
@@ -375,7 +377,10 @@ def test_context_menu_priority_change_persists(db_connection):
 # ===========================================================================
 # 4. Visual priority indication
 # ===========================================================================
-def test_task_item_shows_a_badge_only_for_high_and_low():
+def test_task_item_shows_a_dot_indicator_for_every_priority():
+    # Phase 7C: the textual badges (عاجل/منخفض) are gone from the row by
+    # design. Every priority now shows a compact dot whose objectName encodes
+    # the level and whose tooltip keeps the Arabic name for usability.
     if _skip_without_qt():
         return
     _qt_app()
@@ -385,41 +390,42 @@ def test_task_item_shows_a_badge_only_for_high_and_low():
     low = TaskItem(_make_task(priority=TaskPriority.LOW))
     medium = TaskItem(_make_task(priority=TaskPriority.MEDIUM))
 
-    assert high._priority_badge is not None
-    assert high._priority_badge.text() == "عاجل"
-    assert high._priority_badge.objectName() == "priorityBadgeHigh"
+    assert high._priority_dot.objectName() == "priorityDotHigh"
+    assert high._priority_dot.text() == ""
+    assert "عاجل" in high._priority_dot.toolTip()
 
-    assert low._priority_badge is not None
-    assert low._priority_badge.text() == "منخفض"
-    assert low._priority_badge.objectName() == "priorityBadgeLow"
+    assert low._priority_dot.objectName() == "priorityDotLow"
+    assert low._priority_dot.text() == ""
+    assert "منخفض" in low._priority_dot.toolTip()
 
-    # MEDIUM stays badge-free: priority must remain secondary to the text.
-    assert medium._priority_badge is None
+    # MEDIUM is no longer badge-free-invisible: it shows the neutral dot.
+    assert medium._priority_dot.objectName() == "priorityDotMedium"
+    assert medium._priority_dot.text() == ""
+    assert "عادي" in medium._priority_dot.toolTip()
 
 
-def test_task_item_badge_updates_when_priority_changes():
+def test_task_item_dot_updates_when_priority_changes():
     if _skip_without_qt():
         return
     _qt_app()
     from app.ui.widgets.task_item import TaskItem
 
     item = TaskItem(_make_task(priority=TaskPriority.MEDIUM))
-    assert item._priority_badge is None
+    assert item._priority_dot.objectName() == "priorityDotMedium"
     assert item.priority is TaskPriority.MEDIUM
 
     item.update_task_priority(TaskPriority.HIGH)
     assert item.priority is TaskPriority.HIGH
-    assert item._priority_badge is not None
-    assert item._priority_badge.text() == "عاجل"
-    assert item._priority_badge.objectName() == "priorityBadgeHigh"
+    assert item._priority_dot.objectName() == "priorityDotHigh"
+    assert item._priority_dot.text() == ""
 
-    # Back to MEDIUM: the badge disappears again, nothing stale is left.
+    # Back to MEDIUM: the neutral dot returns, nothing stale is left.
     item.update_task_priority(TaskPriority.MEDIUM)
     assert item.priority is TaskPriority.MEDIUM
-    assert item._priority_badge is None
+    assert item._priority_dot.objectName() == "priorityDotMedium"
 
 
-def test_task_item_badge_survives_completion():
+def test_task_item_dot_survives_completion():
     if _skip_without_qt():
         return
     _qt_app()
@@ -428,8 +434,9 @@ def test_task_item_badge_survives_completion():
     item = TaskItem(_make_task(priority=TaskPriority.HIGH, is_completed=False))
     item.set_completed_silently(True)
 
-    assert item._priority_badge is not None
-    assert item._priority_badge.text() == "عاجل"
+    assert item._priority_dot.objectName() == "priorityDotHigh"
+    assert item._priority_dot.text() == ""
+    assert item._priority_dot.property("completed") is True
 
 
 # ===========================================================================
@@ -715,7 +722,8 @@ def _install_fake_edit_dialog(new_text, new_priority):
     class _FakeDialog:
         last_initial_priority = None
 
-        def __init__(self, initial_text="", initial_priority=None, parent=None):
+        def __init__(self, initial_text="", initial_priority=None, parent=None,
+                     initial_category_id=None, categories=(), icon_provider=None):
             self.initial_text = initial_text
             self.initial_priority = initial_priority
             _FakeDialog.last_initial_priority = initial_priority

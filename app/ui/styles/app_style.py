@@ -139,11 +139,51 @@ def get_application_stylesheet() -> str:
         background: transparent;
     }}
 
-    /* Daily Quote Card */
+    /* Daily Quote Card (history/settings windows) */
     QFrame#quoteCard {{
         background-color: {COLOR_CARD_SURFACE};
         border: 1px solid {COLOR_CARD_BORDER};
         border-radius: 10px;
+    }}
+
+    /* Date header block (Phase 7D): one coherent visual unit. The day
+    number dominates; weekday and the secondary Gregorian/Hijri line step
+    down in size and emphasis. All sizes are integers (see note above). */
+    QFrame#dateHeader {{
+        background-color: transparent;
+        border: none;
+    }}
+
+    QLabel#dayNumber {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: 30px;
+        font-weight: 700;
+        background: transparent;
+    }}
+
+    QLabel#weekdayLabel {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: 14px;
+        font-weight: 600;
+        background: transparent;
+    }}
+
+    QLabel#secondaryDateLabel {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 12px;
+        font-weight: 500;
+        background: transparent;
+    }}
+
+    QWidget#progressRing {{
+        background: transparent;
+    }}
+
+    /* Quiet quote section (Phase 7D): no card, secondary text, clearly
+    below the date in the hierarchy but still readable. */
+    QFrame#quoteSection {{
+        background-color: transparent;
+        border: none;
     }}
 
     QLabel#quoteTextLabel {{
@@ -152,11 +192,20 @@ def get_application_stylesheet() -> str:
            platform default, ~9pt) and emits no warning at all
            (tests/test_app_stylesheet.py). */
         font-size: 13px;
-        color: {COLOR_TEXT_PRIMARY};
+        color: {COLOR_TEXT_SECONDARY};
         font-weight: 500;
         line-height: 1.55;
         font-style: italic;
         background: transparent;
+    }}
+
+    /* Completed-section label inside the task list (Phase 7D). */
+    QLabel#completedSectionLabel {{
+        color: {COLOR_TEXT_COMPLETED};
+        font-size: 12px;
+        font-weight: 600;
+        background: transparent;
+        padding: 2px 0px;
     }}
 
     /* Task List Scroll Area */
@@ -224,6 +273,43 @@ def get_application_stylesheet() -> str:
         padding: 2px 6px;
     }}
 
+    /* Task-row metadata (Phase 7C): icon-only, secondary to the text.
+    The row is: [completion] [expanding text] [category icon] [priority dot]
+    in RTL order. Both indicators live in fixed-size boxes set in code so
+    rows never resize between priorities, categories, or states. */
+    QLabel#taskCategoryIcon {{
+        background-color: transparent;
+        border: none;
+    }}
+
+    /* Priority dots: solid amber (HIGH), translucent blue (MEDIUM), hollow
+    dim ring (LOW) -- fill *and* treatment differ, never hue alone. The
+    12px box is fixed in code; radius 6px makes each level a circle. */
+    QLabel#priorityDotHigh {{
+        background-color: {COLOR_WARNING_PIN};
+        border-radius: 6px;
+    }}
+
+    QLabel#priorityDotMedium {{
+        background-color: rgba(143, 184, 216, 0.55);
+        border-radius: 6px;
+    }}
+
+    QLabel#priorityDotLow {{
+        background-color: transparent;
+        border: 1px solid {COLOR_TEXT_COMPLETED};
+        border-radius: 6px;
+    }}
+
+    /* Completed rows mute every dot to the quiet gray. */
+    QLabel#priorityDotHigh[completed="true"],
+    QLabel#priorityDotMedium[completed="true"],
+    QLabel#priorityDotLow[completed="true"] {{
+        background-color: {COLOR_TEXT_COMPLETED};
+        border: none;
+        border-radius: 6px;
+    }}
+
     /* Priority Selector (new-task row + edit dialog).
        Deliberately compact and quiet: it must not compete with the task text.
        The drop-down arrow is hidden because the combo is small and the value
@@ -287,6 +373,110 @@ def get_application_stylesheet() -> str:
     QComboBox#prioritySelector QAbstractItemView::item:selected {{
         background-color: rgba(79, 124, 172, 0.28);
         color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    /* Category selector: same compact quiet combo as the priority selector,
+    slightly wider bounds for icon + Arabic name. No new colours. */
+    QComboBox#categorySelector {{
+        background-color: {COLOR_INPUT_BG};
+        color: {COLOR_TEXT_SECONDARY};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 5px;
+        padding: 4px 8px;
+        font-size: 12px;
+        min-width: 84px;
+        max-width: 130px;
+    }}
+
+    QComboBox#categorySelector:hover {{
+        border-color: {COLOR_BORDER};
+        color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    QComboBox#categorySelector:focus {{
+        border: 2px solid {COLOR_FOCUS_RING};
+    }}
+
+    QComboBox#categorySelector::drop-down {{
+        border: none;
+        width: 14px;
+        subcontrol-origin: padding;
+        subcontrol-position: center left;
+    }}
+
+    QComboBox#categorySelector::down-arrow {{
+        image: none;
+        width: 0px;
+        height: 0px;
+    }}
+
+    QComboBox#categorySelector QAbstractItemView {{
+        background-color: {COLOR_CARD_SURFACE};
+        color: {COLOR_TEXT_PRIMARY};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 5px;
+        padding: 4px;
+        outline: none;
+    }}
+
+    QComboBox#categorySelector QAbstractItemView::item {{
+        padding: 5px 8px;
+        border-radius: 4px;
+        min-height: 22px;
+    }}
+
+    QComboBox#categorySelector QAbstractItemView::item:selected {{
+        background-color: rgba(79, 124, 172, 0.28);
+        color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    /* Bottom input dock (Phase 7C): one cohesive card holding the priority
+    selector, category selector, text field, and add button. Children drop
+    their individual card chrome inside the dock only (contextual rules);
+    elsewhere they keep the standalone styling above. */
+    QFrame#taskInputDock {{
+        background-color: {COLOR_CARD_SURFACE};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 10px;
+    }}
+
+    QFrame#taskInputDock QComboBox#prioritySelector,
+    QFrame#taskInputDock QComboBox#categorySelector {{
+        background-color: transparent;
+        border: none;
+        min-width: 0px;
+    }}
+
+    QFrame#taskInputDock QLineEdit#taskInputField {{
+        background-color: transparent;
+        border: none;
+        padding: 6px 4px;
+    }}
+
+    QFrame#taskInputDock QLineEdit#taskInputField:focus {{
+        border: none;
+    }}
+
+    QPushButton#taskAddButton {{
+        background-color: {COLOR_FOCUS_RING};
+        color: #FFFFFF;
+        border: none;
+        border-radius: 11px;
+        font-size: 16px;
+        font-weight: 700;
+        min-width: 22px;
+        max-width: 22px;
+        min-height: 22px;
+        max-height: 22px;
+        padding: 0px;
+    }}
+
+    QPushButton#taskAddButton:hover {{
+        background-color: #5D8DBE;
+    }}
+
+    QPushButton#taskAddButton:pressed {{
+        background-color: #436E9B;
     }}
 
     /* Checkbox Styling with clear accessible states */

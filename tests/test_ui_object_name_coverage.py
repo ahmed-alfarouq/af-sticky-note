@@ -41,7 +41,9 @@ APP_ROOT = PROJECT_ROOT / "app"
 STRUCTURAL_NAMES = {
     "centralWidget",   # the QMainWindow's central widget (transparent)
     "headerFrame",     # drag-area frame; styled by its children
-    "taskInputRow",    # the row that holds selector + input
+    # NOTE (Phase 7C): "taskInputRow" was removed here. The old plain input
+    # row became the styled QFrame#taskInputDock bottom dock, so the name is
+    # neither set nor needed anymore.
     # The settings logo is a QLabel that only ever shows a scaled QPixmap --
     # it has no text, so no font-size rule could apply to it.
     "settingsAppLogo",

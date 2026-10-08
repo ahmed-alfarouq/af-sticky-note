@@ -5,7 +5,7 @@ At the transition to a new day:
 - Source day tasks remain historically untouched (immutable).
 - Target tasks receive new primary keys, new timestamps, target day_id,
   and start incomplete (is_completed = False).
-- Text, priority, and original position are preserved.
+- Text, priority, category, and original position are preserved.
 - The operation is idempotent: executing it repeatedly for the same target day
   will never duplicate tasks (guaranteed by database unique index and checks).
 - Executed atomically within UnitOfWork.
@@ -78,6 +78,7 @@ class DailyRolloverService:
                     position=task.position,
                     priority=task.priority,
                     source_task_id=task.id,
+                    category_id=task.category_id,
                 )
                 rolled_over_tasks.append(new_task)
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 import sqlite3
 from typing import List, Optional
 
-from app.core.models import Task, TaskPriority
+from app.core.models import DEFAULT_CATEGORY_ID, Task, TaskPriority
 from app.infrastructure.clock import utc_now_iso
 
 
@@ -46,17 +46,20 @@ class TaskRepository:
         position: Optional[int] = None,
         priority: TaskPriority = TaskPriority.MEDIUM,
         source_task_id: Optional[int] = None,
+        category_id: str = DEFAULT_CATEGORY_ID,
     ) -> Task:
         if position is None:
             position = self._next_position(day_id)
         now = utc_now_iso()
         priority_val = priority.value if isinstance(priority, TaskPriority) else TaskPriority(priority).value
+        if not isinstance(category_id, str) or not category_id:
+            raise ValueError(f"Invalid task category: {category_id!r}")
         cursor = self._conn.execute(
             """
-            INSERT INTO tasks (day_id, text, is_completed, position, priority, source_task_id, created_at, updated_at)
-            VALUES (?, ?, 0, ?, ?, ?, ?, ?)
+            INSERT INTO tasks (day_id, text, is_completed, position, priority, source_task_id, category_id, created_at, updated_at)
+            VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)
             """,
-            (day_id, text, position, priority_val, source_task_id, now, now),
+            (day_id, text, position, priority_val, source_task_id, category_id, now, now),
         )
         return Task(
             id=cursor.lastrowid,
@@ -68,6 +71,7 @@ class TaskRepository:
             updated_at=now,
             priority=TaskPriority(priority_val),
             source_task_id=source_task_id,
+            category_id=category_id,
         )
 
     def update_text(self, task_id: int, text: str) -> None:
@@ -90,6 +94,15 @@ class TaskRepository:
         self._conn.execute(
             "UPDATE tasks SET priority = ?, updated_at = ? WHERE id = ?",
             (priority_val, now, task_id),
+        )
+
+    def update_category(self, task_id: int, category_id: str) -> None:
+        if not isinstance(category_id, str) or not category_id:
+            raise ValueError(f"Invalid task category: {category_id!r}")
+        now = utc_now_iso()
+        self._conn.execute(
+            "UPDATE tasks SET category_id = ?, updated_at = ? WHERE id = ?",
+            (category_id, now, task_id),
         )
 
     def delete(self, task_id: int) -> None:
@@ -119,6 +132,9 @@ class TaskRepository:
         keys = row.keys()
         priority_raw = row["priority"] if "priority" in keys and row["priority"] is not None else "MEDIUM"
         source_task_id = row["source_task_id"] if "source_task_id" in keys else None
+        # Pre-005 rows have no category column; NULL can only come from
+        # out-of-band SQL (the service layer never writes it). Default both.
+        category_id = row["category_id"] if "category_id" in keys and row["category_id"] else DEFAULT_CATEGORY_ID
         return Task(
             id=row["id"],
             day_id=row["day_id"],
@@ -129,4 +145,5 @@ class TaskRepository:
             updated_at=row["updated_at"],
             priority=TaskPriority(priority_raw),
             source_task_id=source_task_id,
+            category_id=category_id,
         )

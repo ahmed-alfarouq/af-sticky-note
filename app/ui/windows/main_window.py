@@ -41,13 +41,18 @@ from PySide6.QtWidgets import (
 )
 
 from app.config.settings import APP_NAME
-from app.core.models import Day, Task, TaskPriority
+from app.core.daily_stats import compute_daily_stats
+from app.core.models import DEFAULT_CATEGORY_ID, Category, Day, Task, TaskPriority
+from app.core.services.category_service import CategoryService
 from app.core.services.history_service import HistoryService
 from app.core.services.task_service import TaskService
 from app.infrastructure.paths import get_logo_path
+from app.ui.category_icons import CategoryIconProvider
 from app.ui.geometry_manager import WindowGeometryManager
 from app.ui.note_shape import NoteShape, build_note_shape
 from app.ui.styles.app_style import get_application_stylesheet
+from app.ui.widgets.category_selector import CategorySelector
+from app.ui.widgets.date_header import DateHeaderWidget
 from app.ui.widgets.paper_surface import PaperSurface, shape_to_region
 from app.ui.widgets.priority_selector import PrioritySelector
 from app.ui.widgets.quote_widget import QuoteWidget
@@ -85,10 +90,22 @@ class MainWindow(QMainWindow):
         startup_manager: Optional[StartupManager] = None,
         on_exit_requested: Optional[Callable[[], None]] = None,
         parent: Optional[QWidget] = None,
+        category_service: Optional[CategoryService] = None,
+        icon_provider: Optional[CategoryIconProvider] = None,
     ) -> None:
         super().__init__(parent)
         self._day = day
         self._task_service = task_service
+        self._category_service = category_service
+        # Categories are loaded once per window lifecycle -- no polling, no
+        # per-interaction DB reads. Empty when no service is wired (older
+        # call sites), in which case category UI stays out of the way.
+        self._categories: Sequence[Category] = (
+            category_service.list_active_categories() if category_service is not None else ()
+        )
+        # The icon provider is filesystem-only (no DB), so a default one is
+        # always safe to construct.
+        self._icon_provider = icon_provider or CategoryIconProvider()
         self._geometry_manager = geometry_manager or WindowGeometryManager()
         self._history_service = history_service
         self._startup_manager = startup_manager
@@ -233,11 +250,15 @@ class MainWindow(QMainWindow):
 
         paper_layout.addWidget(self._header_frame)
 
-        # 2. Daily Quote & Date Card
-        self._quote_widget = QuoteWidget(date_text=date_str, quote_text=quote_text, parent=self._paper_surface)
+        # 2. Date header: strong day hierarchy + daily progress ring.
+        self._date_header = DateHeaderWidget(date_str, parent=self._paper_surface)
+        paper_layout.addWidget(self._date_header)
+
+        # 3. Quiet daily quote (date lives in the header now).
+        self._quote_widget = QuoteWidget(quote_text=quote_text, parent=self._paper_surface)
         paper_layout.addWidget(self._quote_widget)
 
-        # 3. Scrollable Task List
+        # 4. Scrollable Task List (completed sink last, section-labeled).
         self._task_list = TaskList(parent=self._paper_surface)
         self._task_list.task_completed_toggled.connect(self._on_task_completed_toggled)
         self._task_list.task_edit_requested.connect(self._on_task_edit_requested)
@@ -245,29 +266,49 @@ class MainWindow(QMainWindow):
         self._task_list.task_priority_change_requested.connect(
             self._on_task_priority_change_requested
         )
+        self._task_list.task_category_change_requested.connect(
+            self._on_task_category_change_requested
+        )
         self._task_list.clear_completed_requested.connect(self._on_clear_completed_requested)
         self._task_list.history_requested.connect(self._on_history_requested)
         self._task_list.settings_requested.connect(self._on_settings_requested)
+        self._task_list.set_categories(self._categories, self._icon_provider)
         self._task_list.set_tasks(initial_tasks)
+        self._refresh_progress()
         paper_layout.addWidget(self._task_list, 1)
 
-        # 4. Task Input row: [priority selector] [task text field]
-        # The selector is added first so RTL puts it on the right, next to the
-        # other controls, and the text field takes all remaining space.
-        input_row = QWidget(self._paper_surface)
-        input_row.setObjectName("taskInputRow")
-        input_layout = QHBoxLayout(input_row)
-        input_layout.setContentsMargins(0, 0, 0, 0)
-        input_layout.setSpacing(8)
+        # 4. Bottom input dock (Phase 7C): one cohesive card holding the
+        # priority selector, category selector, text field, and add button.
+        # DOM order is priority/category/text/add; RTL lays that out
+        # right-to-left, so priority sits rightmost, the text expands in
+        # the middle, and the add button anchors the visual end.
+        dock = QFrame(self._paper_surface)
+        dock.setObjectName("taskInputDock")
+        dock_layout = QHBoxLayout(dock)
+        dock_layout.setContentsMargins(6, 4, 6, 4)
+        dock_layout.setSpacing(6)
 
-        self._priority_selector = PrioritySelector(parent=input_row)
-        input_layout.addWidget(self._priority_selector)
+        self._priority_selector = PrioritySelector(parent=dock)
+        dock_layout.addWidget(self._priority_selector)
 
-        self._task_input = TaskInput(parent=input_row)
+        self._category_selector = CategorySelector(
+            self._categories, self._icon_provider, parent=dock
+        )
+        dock_layout.addWidget(self._category_selector)
+
+        self._task_input = TaskInput(parent=dock)
         self._task_input.task_submitted.connect(self._on_task_submitted)
-        input_layout.addWidget(self._task_input, 1)
+        dock_layout.addWidget(self._task_input, 1)
 
-        paper_layout.addWidget(input_row)
+        self._add_btn = QPushButton("+", dock)
+        self._add_btn.setObjectName("taskAddButton")
+        self._add_btn.setAccessibleName("إضافة المهمة")
+        self._add_btn.setToolTip("إضافة المهمة")
+        self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._add_btn.clicked.connect(self._on_add_button_clicked)
+        dock_layout.addWidget(self._add_btn)
+
+        paper_layout.addWidget(dock)
 
     # -------------------------------------------------------------------------
     # Organic paper silhouette: shape + window mask lifecycle
@@ -340,17 +381,28 @@ class MainWindow(QMainWindow):
     ) -> None:
         """Update the displayed date, quote, and task list without recreating widgets."""
         self._day = day
-        self._quote_widget.set_date_and_quote(day.date, quote_text)
+        self._date_header.set_date(day.date)
+        self._quote_widget.set_quote_text(quote_text or "لا توجد حكمة متاحة لهذا اليوم")
         self._task_list.set_tasks(tasks)
+        self._refresh_progress()
+
+    def _refresh_progress(self) -> None:
+        """Recompute today's stats from in-memory rows and update the ring.
+
+        No DB round trip: TaskList rows already carry current Tasks.
+        """
+        stats = compute_daily_stats(self._task_list.tasks_snapshot())
+        self._date_header.set_progress(stats.completed, stats.total)
 
     def _on_task_submitted(self, raw_text: str) -> None:
         """Handle task submission from TaskInput.
 
-        The priority chosen in the selector is handed to the service as a
-        ``TaskPriority`` -- it is never inferred from the task text.
+        The priority and category chosen in the selectors are handed to the
+        service as values -- they are never inferred from the task text.
 
         Crucial rule: TaskInput is only cleared AFTER task creation succeeds.
-        If validation or persistence fails, raw text remains untouched.
+        If validation or persistence fails, raw text remains untouched -- and
+        so does the category selection.
         """
         if self._day.id is None:
             logger.error("Cannot create task: day.id is None")
@@ -361,58 +413,88 @@ class MainWindow(QMainWindow):
                 self._day.id,
                 raw_text,
                 priority=self._priority_selector.selected_priority(),
+                category_id=self._category_selector.selected_category_id(),
             )
             if created_task is not None:
                 self._task_list.add_task(created_task)
                 self._task_input.clear()
-                # Reset the selector so the next task starts from the neutral
-                # default instead of silently inheriting the previous choice.
+                # Reset the selectors so the next task starts from the neutral
+                # defaults instead of silently inheriting the previous choice.
                 self._priority_selector.set_priority(TaskPriority.MEDIUM)
+                self._category_selector.reset_to_default()
+                self._refresh_progress()
             # Retain focus in input field whether text was created or empty
             self._task_input.setFocus()
         except Exception as exc:
             logger.error("Failed to create task %r: %s", raw_text, exc)
             # Input text is intentionally retained on error
 
+    def _on_add_button_clicked(self) -> None:
+        """Submit the current input text through the same creation path."""
+        self._on_task_submitted(self._task_input.text())
+
     def _on_task_completed_toggled(self, task_id: int, is_completed: bool) -> None:
         """Handle checkbox toggle from TaskList / TaskItem."""
         try:
             self._task_service.toggle_task_completion(task_id, is_completed)
+            # Keep the row's carried task in sync even when this handler is
+            # invoked without the checkbox signal (silent no-op otherwise).
+            item = self._task_list._items.get(task_id)
+            if item is not None:
+                item.set_completed_silently(is_completed)
+            # The row already restyled itself; reposition it between the
+            # active/completed sections and refresh the progress ring.
+            self._task_list.refresh_task_order()
+            self._refresh_progress()
         except Exception as exc:
             logger.error("Failed to toggle completion for task %d: %s", task_id, exc)
 
     def _on_task_edit_requested(self, task_id: int) -> None:
-        """Open edit dialog and persist updated task text and/or priority.
+        """Open edit dialog and persist updated task text/category/priority.
 
         The current values are read from the TaskItem that is already on
-        screen -- the Task object it holds carries the priority -- so no extra
-        database round trip is needed.
+        screen -- the Task object it holds carries text, category, and
+        priority -- so no extra database round trip is needed.
         """
         try:
-            # Find the current task from the UI item; it already carries both
-            # the text and the priority.
+            # Find the current task from the UI item; it already carries the
+            # text, category, and priority.
             task_item = self._task_list._items.get(task_id)
             current_text = task_item.task_text if task_item else ""
             current_priority = task_item.priority if task_item else TaskPriority.MEDIUM
+            current_category = (
+                task_item.category_id if task_item is not None else DEFAULT_CATEGORY_ID
+            )
 
             from app.ui.widgets.task_edit_dialog import TaskEditDialog
             dialog = TaskEditDialog(
                 initial_text=current_text,
                 initial_priority=current_priority,
+                initial_category_id=current_category,
+                categories=self._categories,
+                icon_provider=self._icon_provider,
                 parent=self,
             )
             if dialog.exec():
                 new_text = dialog.get_text()
                 new_priority = dialog.get_priority()
 
-                # Text and priority are independent: changing one must never
-                # silently reset the other.
+                # Text, category, and priority are independent: changing one
+                # must never silently reset the others.
                 if new_text and new_text != current_text:
                     if self._task_service.update_task_text(task_id, new_text):
                         self._task_list.update_task_text(task_id, new_text)
                 if new_priority != current_priority:
                     self._task_service.update_task_priority(task_id, new_priority)
                     self._task_list.update_task_priority(task_id, new_priority)
+                # Without category choices (pre-category call sites) the
+                # dialog can only echo the default -- never downgrade a real
+                # category the dialog never offered.
+                if dialog.has_category_choices():
+                    new_category = dialog.get_category_id()
+                    if new_category != current_category:
+                        self._task_service.update_task_category(task_id, new_category)
+                        self._task_list.update_task_category(task_id, new_category)
         except Exception as exc:
             logger.error("Failed to edit task %d: %s", task_id, exc)
 
@@ -432,11 +514,26 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             logger.error("Failed to change priority for task %d: %s", task_id, exc)
 
+    def _on_task_category_change_requested(
+        self, task_id: int, category_id: str
+    ) -> None:
+        """Change a task's category straight from its context menu.
+
+        Updates the record in place: same id, day, source task, completion
+        state, text, position and priority -- only the category column changes.
+        """
+        try:
+            self._task_service.update_task_category(task_id, category_id)
+            self._task_list.update_task_category(task_id, category_id)
+        except Exception as exc:
+            logger.error("Failed to change category for task %d: %s", task_id, exc)
+
     def _on_task_delete_requested(self, task_id: int) -> None:
         """Handle deletion of a specific task."""
         try:
             self._task_service.delete_task(task_id)
             self._task_list.remove_task(task_id)
+            self._refresh_progress()
         except Exception as exc:
             logger.error("Failed to delete task %d: %s", task_id, exc)
 
@@ -449,6 +546,7 @@ class MainWindow(QMainWindow):
             # Refresh list with remaining tasks
             remaining_tasks = self._task_service.get_today_tasks(self._day.id)
             self._task_list.set_tasks(remaining_tasks)
+            self._refresh_progress()
         except Exception as exc:
             logger.error("Failed to clear completed tasks for day %d: %s", self._day.id, exc)
 

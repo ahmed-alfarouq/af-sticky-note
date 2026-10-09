@@ -63,10 +63,9 @@ class ProgressRing(QWidget):
             painter.setPen(track)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(cx.x() - diameter // 2, cx.y() - diameter // 2, diameter, diameter)
-            # Arc: trust blue, success green at 100%.
+            # Arc: trust blue, success green at 100%. Zero progress draws
+            # no arc but still falls through to the "0٪" center label.
             fraction = (self._completed / self._total) if self._total else 0.0
-            if fraction <= 0.0:
-                return
             color = "#6FAF8F" if fraction >= 1.0 else "#4F7CAC"
             arc = QPen(QColor(color), RING_WIDTH)
             arc.setCapStyle(Qt.PenCapStyle.RoundCap)
@@ -78,7 +77,7 @@ class ProgressRing(QWidget):
             # Center percentage.
             painter.setPen(QColor("#F2F5F8"))
             font = QFont(painter.font())
-            font.setPixelSize(11)
+            font.setPixelSize(9)
             font.setBold(True)
             painter.setFont(font)
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, f"{round(fraction * 100)}٪")

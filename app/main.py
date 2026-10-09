@@ -26,10 +26,12 @@ from app.core.services.daily_rollover_service import DailyRolloverService
 from app.core.services.category_service import CategoryService
 from app.core.services.quote_import_service import QuoteImportService
 from app.core.services.quote_service import NoAvailableQuotesError, QuoteService
+from app.core.services.report_service import ReportService
 from app.core.services.task_service import TaskService
 from app.database.connection import create_connection
 from app.database.category_repository import CategoryRepository
 from app.database.day_repository import DayRepository
+from app.database.report_repository import ReportRepository
 from app.database.migrations import MigrationError, apply_migrations
 from app.database.quote_repository import QuoteRepository
 from app.database.quote_rotation_state_repository import QuoteRotationStateRepository
@@ -71,6 +73,9 @@ def bootstrap_application(app: QApplication) -> MainWindow:
     # Services
     task_service = TaskService(task_repo=task_repo, category_repo=category_repo)
     category_service = CategoryService(category_repo=category_repo)
+    report_service = ReportService(
+        report_repo=ReportRepository(conn), category_repo=category_repo
+    )
     quote_import_service = QuoteImportService(quote_repo=quote_repo)
     quote_service = QuoteService(
         conn=conn,
@@ -122,6 +127,7 @@ def bootstrap_application(app: QApplication) -> MainWindow:
         on_exit_requested=_on_app_exit_requested,
         category_service=category_service,
         icon_provider=CategoryIconProvider(),
+        report_service=report_service,
     )
 
     # 5. Initialize system tray if on Windows adapter and attach to desktop layer if supported

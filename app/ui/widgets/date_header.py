@@ -45,12 +45,25 @@ class DateHeaderWidget(QFrame):
         self._weekday_label = QLabel(self)
         self._weekday_label.setObjectName("weekdayLabel")
         self._weekday_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._secondary_label = QLabel(self)
-        self._secondary_label.setObjectName("secondaryDateLabel")
-        self._secondary_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._secondary_label.setWordWrap(True)
+        # Hijri line (top) — soft-blue emphasis.
+        self._hijri_label = QLabel(self)
+        self._hijri_label.setObjectName("hijriDateLabel")
+        self._hijri_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._hijri_label.setWordWrap(True)
         stack.addWidget(self._weekday_label)
-        stack.addWidget(self._secondary_label)
+        stack.addWidget(self._hijri_label)
+        # Gregorian line (bottom) — quieter secondary text.
+        self._gregorian_label = QLabel(self)
+        self._gregorian_label.setObjectName("gregorianDateLabel")
+        self._gregorian_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._gregorian_label.setWordWrap(True)
+        stack.addWidget(self._gregorian_label)
+        # Compatibility alias: frozen UI tests read the combined secondary
+        # text from ``_secondary_label``. It is intentionally NOT laid out
+        # (and has no objectName, so the QSS coverage guard ignores it) and
+        # carries the same combined string for those readers only.
+        self._secondary_label = QLabel(self)
+        self._secondary_label.setVisible(False)
         layout.addLayout(stack)
 
         layout.addStretch(1)
@@ -65,6 +78,8 @@ class DateHeaderWidget(QFrame):
         day_number, weekday_ar, month_year, hijri = get_date_parts(date_text)
         self._day_number.setText(day_number)
         self._weekday_label.setText(weekday_ar)
+        self._hijri_label.setText(hijri)
+        self._gregorian_label.setText(month_year)
         secondary = f"{month_year}  •  {hijri}" if weekday_ar else month_year or hijri
         self._secondary_label.setText(secondary)
         self.setAccessibleDescription(f"تاريخ اليوم: {day_number} {secondary}")

@@ -31,6 +31,7 @@ class TaskList(QScrollArea):
     task_category_change_requested = Signal(int, str)  # task_id, category_id
     clear_completed_requested = Signal()        # emit to clear completed tasks for today
     history_requested = Signal()                # emit to open History UI
+    dashboard_requested = Signal()              # emit to open weekly dashboard
     settings_requested = Signal()               # emit to open Settings UI
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
@@ -176,8 +177,12 @@ class TaskList(QScrollArea):
         self._section_label.setVisible(False)
 
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
-        """Show list context menu offering 'Open History', 'Settings', and 'Clear completed'."""
+        """Show list context menu: dashboard, history, settings, clear completed."""
         menu = QMenu(self)
+
+        dashboard_action = QAction("لوحة التقارير الأسبوعية", menu)
+        dashboard_action.triggered.connect(self.dashboard_requested.emit)
+        menu.addAction(dashboard_action)
 
         history_action = QAction("فتح السجل", menu)
         history_action.triggered.connect(self.history_requested.emit)

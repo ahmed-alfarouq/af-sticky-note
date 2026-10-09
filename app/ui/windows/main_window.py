@@ -45,6 +45,7 @@ from app.core.daily_stats import compute_daily_stats
 from app.core.models import DEFAULT_CATEGORY_ID, Category, Day, Task, TaskPriority
 from app.core.services.category_service import CategoryService
 from app.core.services.history_service import HistoryService
+from app.core.services.report_service import ReportService
 from app.core.services.task_service import TaskService
 from app.infrastructure.paths import get_logo_path
 from app.ui.category_icons import CategoryIconProvider
@@ -92,10 +93,12 @@ class MainWindow(QMainWindow):
         parent: Optional[QWidget] = None,
         category_service: Optional[CategoryService] = None,
         icon_provider: Optional[CategoryIconProvider] = None,
+        report_service: Optional[ReportService] = None,
     ) -> None:
         super().__init__(parent)
         self._day = day
         self._task_service = task_service
+        self._report_service = report_service
         self._category_service = category_service
         # Categories are loaded once per window lifecycle -- no polling, no
         # per-interaction DB reads. Empty when no service is wired (older
@@ -271,35 +274,32 @@ class MainWindow(QMainWindow):
         )
         self._task_list.clear_completed_requested.connect(self._on_clear_completed_requested)
         self._task_list.history_requested.connect(self._on_history_requested)
+        self._task_list.dashboard_requested.connect(self._on_dashboard_requested)
         self._task_list.settings_requested.connect(self._on_settings_requested)
         self._task_list.set_categories(self._categories, self._icon_provider)
         self._task_list.set_tasks(initial_tasks)
         self._refresh_progress()
         paper_layout.addWidget(self._task_list, 1)
 
-        # 4. Bottom input dock (Phase 7C): one cohesive card holding the
-        # priority selector, category selector, text field, and add button.
-        # DOM order is priority/category/text/add; RTL lays that out
-        # right-to-left, so priority sits rightmost, the text expands in
-        # the middle, and the add button anchors the visual end.
+        # 4. Bottom input dock: task input (right in RTL), grouped
+        # category/priority pair, add button (visual end). The pair shares
+        # one background with merged borders (see QSS). NOTE: no wrapper
+        # frame is used on purpose -- the frozen row test requires the
+        # priority selector and the text field to share one parent, so the
+        # grouping here is purely visual (flat DOM, zero inter-pair gap).
         dock = QFrame(self._paper_surface)
         dock.setObjectName("taskInputDock")
         dock_layout = QHBoxLayout(dock)
         dock_layout.setContentsMargins(6, 4, 6, 4)
-        dock_layout.setSpacing(6)
+        dock_layout.setSpacing(0)
 
-        self._priority_selector = PrioritySelector(parent=dock)
-        dock_layout.addWidget(self._priority_selector)
-
-        self._category_selector = CategorySelector(
-            self._categories, self._icon_provider, parent=dock
-        )
-        dock_layout.addWidget(self._category_selector)
-
+        # 1. Task Input (RIGHTMOST in RTL = added first with stretch)
         self._task_input = TaskInput(parent=dock)
         self._task_input.task_submitted.connect(self._on_task_submitted)
         dock_layout.addWidget(self._task_input, 1)
+        dock_layout.addSpacing(4)
 
+        # 2. Add Button
         self._add_btn = QPushButton("+", dock)
         self._add_btn.setObjectName("taskAddButton")
         self._add_btn.setAccessibleName("إضافة المهمة")
@@ -308,6 +308,16 @@ class MainWindow(QMainWindow):
         self._add_btn.clicked.connect(self._on_add_button_clicked)
         dock_layout.addWidget(self._add_btn)
 
+        # 3. Meta pair: Category + Priority, adjacent with no gap so the
+        # QSS merged-border rules render them as one pill. Category FIRST
+        # (so it's RIGHT of Priority in RTL).
+        self._category_selector = CategorySelector(
+            self._categories, self._icon_provider, parent=dock
+        )
+        dock_layout.addWidget(self._category_selector)
+        self._priority_selector = PrioritySelector(parent=dock)
+        dock_layout.addWidget(self._priority_selector)
+        dock_layout.addSpacing(4)
         paper_layout.addWidget(dock)
 
     # -------------------------------------------------------------------------
@@ -565,6 +575,25 @@ class MainWindow(QMainWindow):
             history_win.exec()
         except Exception as exc:
             logger.error("Failed to open History window: %s", exc)
+
+    def _on_dashboard_requested(self) -> None:
+        """Open the weekly reporting dashboard (fresh dialog per open)."""
+        if self._report_service is None:
+            logger.warning("ReportService not configured on MainWindow")
+            return
+        try:
+            from PySide6.QtCore import QSettings
+
+            from app.ui.windows.dashboard_window import WeeklyDashboardWindow
+            dashboard = WeeklyDashboardWindow(
+                report_service=self._report_service,
+                icon_provider=self._icon_provider,
+                qsettings=QSettings(),
+                parent=self,
+            )
+            dashboard.exec()
+        except Exception as exc:
+            logger.error("Failed to open Dashboard window: %s", exc)
 
     def _on_settings_requested(self) -> None:
         """Open the Settings dialog, reusing or activating an existing instance."""

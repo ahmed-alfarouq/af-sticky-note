@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QComboBox, QSizePolicy, QWidget
 
 from app.core.models import TaskPriority
@@ -33,9 +34,19 @@ class PrioritySelector(QComboBox):
         # Compact: never wider than its own contents, so it cannot compete
         # with the task text for space.
         self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
 
         for priority in PRIORITY_ORDER:
             self.addItem(priority_label(priority), priority)
+
+        # HIGH reads red in the dropdown. NOTE: item.data() without a role
+        # returns the DisplayRole (label text); the TaskPriority lives under
+        # UserRole as set by addItem(text, userData).
+        model = self.model()
+        for row in range(model.rowCount()):
+            item = model.item(row)
+            if item is not None and item.data(Qt.ItemDataRole.UserRole) == TaskPriority.HIGH:
+                item.setForeground(QColor("#E57373"))  # Red
 
         self.setCurrentIndex(self._index_of(TaskPriority.MEDIUM))
 

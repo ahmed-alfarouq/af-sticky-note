@@ -168,9 +168,16 @@ def get_application_stylesheet() -> str:
         background: transparent;
     }}
 
-    QLabel#secondaryDateLabel {{
-        color: {COLOR_TEXT_SECONDARY};
+    QLabel#hijriDateLabel {{
+        color: {COLOR_SOFT};
         font-size: 12px;
+        font-weight: 600;
+        background: transparent;
+    }}
+
+    QLabel#gregorianDateLabel {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 11px;
         font-weight: 500;
         background: transparent;
     }}
@@ -225,6 +232,7 @@ def get_application_stylesheet() -> str:
         border-radius: 8px;
         margin-top: 1px;
         margin-bottom: 1px;
+        text-align: right;
     }}
 
     QFrame#taskItemFrame:hover {{
@@ -235,7 +243,6 @@ def get_application_stylesheet() -> str:
     QLabel#taskTextLabel {{
         /* Keep this value quoted: an unquoted pipe makes Qt's QSS parser
            discard this entire stylesheet (tests/test_app_stylesheet.py). */
-        qproperty-alignment: 'AlignRight | AlignVCenter';
         color: {COLOR_TEXT_PRIMARY};
         font-size: 14px;
         font-weight: 500;
@@ -245,7 +252,6 @@ def get_application_stylesheet() -> str:
     QLabel#taskTextLabelCompleted {{
         /* Keep this value quoted: an unquoted pipe makes Qt's QSS parser
            discard this entire stylesheet (tests/test_app_stylesheet.py). */
-        qproperty-alignment: 'AlignRight | AlignVCenter';
         color: {COLOR_TEXT_COMPLETED};
         font-size: 14px;
         text-decoration: line-through;
@@ -457,6 +463,34 @@ def get_application_stylesheet() -> str:
         border: none;
     }}
 
+    /* Grouped category + priority pair inside the dock: the two combos
+    sit adjacent with zero layout gap and merged borders so they render
+    as one pill. (Flat DOM on purpose -- see main_window.py -- so these
+    descendant rules carry the grouping instead of a wrapper frame.) */
+    QFrame#taskInputDock QComboBox#categorySelector {{
+        background-color: {COLOR_INPUT_BG};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-left: none;
+        border-top-left-radius: 0px;
+        border-bottom-left-radius: 0px;
+        border-top-right-radius: 6px;
+        border-bottom-right-radius: 6px;
+        min-width: 0px;
+        padding: 2px 6px;
+    }}
+
+    QFrame#taskInputDock QComboBox#prioritySelector {{
+        background-color: {COLOR_INPUT_BG};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-right: none;
+        border-top-right-radius: 0px;
+        border-bottom-right-radius: 0px;
+        border-top-left-radius: 6px;
+        border-bottom-left-radius: 6px;
+        min-width: 0px;
+        padding: 2px 6px;
+    }}
+
     QPushButton#taskAddButton {{
         background-color: {COLOR_FOCUS_RING};
         color: #FFFFFF;
@@ -502,8 +536,18 @@ def get_application_stylesheet() -> str:
     }}
 
     QCheckBox::indicator:checked {{
-        background-color: {COLOR_SUCCESS};
+        background-color: {COLOR_INPUT_BG};
         border-color: {COLOR_SUCCESS};
+        image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='white' d='M3 6l2 2 4-4'/></svg>");
+    }}
+
+    QCheckBox::indicator:checked:hover {{
+        background-color: #18202F;
+        border-color: {COLOR_SUCCESS};
+    }}
+
+    QCheckBox::indicator:checked:focus {{
+        border: 2px solid {COLOR_FOCUS_RING};
     }}
 
     /* Task Input Field */
@@ -551,6 +595,187 @@ def get_application_stylesheet() -> str:
 
     QPushButton#historyCloseButton:pressed {{
         background-color: #141B26;
+    }}
+
+    /* Weekly dashboard (Phase 7F): same dark-compact language as the rest. */
+    QDialog#dashboardWindow {{
+        background-color: {COLOR_BACKGROUND};
+    }}
+
+    QScrollArea#dashboardScroll, QWidget#dashboardContent {{
+        background-color: transparent;
+        border: none;
+    }}
+
+    QLabel#dashboardTitle {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: 17px;
+        font-weight: 700;
+        background: transparent;
+    }}
+
+    QLabel#dashboardRangeLabel {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 12px;
+        font-weight: 500;
+        background: transparent;
+    }}
+
+    QPushButton#dashboardPresetButton {{
+        background-color: {COLOR_CARD_SURFACE};
+        color: {COLOR_TEXT_SECONDARY};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 12px;
+        font-weight: 500;
+    }}
+
+    QPushButton#dashboardPresetButton:hover {{
+        border-color: {COLOR_FOCUS_RING};
+        color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    QPushButton#dashboardPresetButton:checked {{
+        background-color: rgba(79, 124, 172, 0.30);
+        border-color: {COLOR_FOCUS_RING};
+        color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    QDateEdit#dashboardDateEdit {{
+        background-color: {COLOR_INPUT_BG};
+        color: {COLOR_TEXT_PRIMARY};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 6px;
+        padding: 4px 6px;
+        font-size: 12px;
+    }}
+
+    QDateEdit#dashboardDateEdit:focus {{
+        border: 2px solid {COLOR_FOCUS_RING};
+    }}
+
+    QDateEdit#dashboardDateEdit::drop-down {{
+        border: none;
+        width: 14px;
+    }}
+
+    QCalendarWidget QWidget {{
+        background-color: {COLOR_CARD_SURFACE};
+        color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    QCalendarWidget QAbstractItemView {{
+        background-color: {COLOR_CARD_SURFACE};
+        color: {COLOR_TEXT_PRIMARY};
+        selection-background-color: rgba(79, 124, 172, 0.40);
+        selection-color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    QPushButton#dashboardApplyButton {{
+        background-color: {COLOR_FOCUS_RING};
+        color: #FFFFFF;
+        border: none;
+        border-radius: 6px;
+        padding: 5px 14px;
+        font-size: 12px;
+        font-weight: 600;
+    }}
+
+    QPushButton#dashboardApplyButton:hover {{
+        background-color: #5D8DBE;
+    }}
+
+    QPushButton#dashboardApplyButton:pressed {{
+        background-color: #436E9B;
+    }}
+
+    QLabel#dashboardErrorLabel {{
+        color: #E57373;
+        font-size: 12px;
+        font-weight: 500;
+        background: transparent;
+    }}
+
+    QFrame#dashboardSummary {{
+        background-color: {COLOR_CARD_SURFACE};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 10px;
+    }}
+
+    QLabel#dashboardStatValue {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: 18px;
+        font-weight: 700;
+        background: transparent;
+    }}
+
+    QLabel#dashboardStatLabel {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 11px;
+        font-weight: 500;
+        background: transparent;
+    }}
+
+    QFrame#categoryCard {{
+        background-color: {COLOR_CARD_SURFACE};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 8px;
+    }}
+
+    QLabel#categoryCardIcon {{
+        background: transparent;
+        border: none;
+    }}
+
+    QLabel#categoryCardName {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: 13px;
+        font-weight: 600;
+        background: transparent;
+    }}
+
+    QLabel#categoryCardStats {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 12px;
+        font-weight: 500;
+        background: transparent;
+    }}
+
+    QProgressBar#categoryCardBar {{
+        background-color: {COLOR_CARD_BORDER};
+        border: none;
+        border-radius: 3px;
+    }}
+
+    QProgressBar#categoryCardBar::chunk {{
+        background-color: {COLOR_FOCUS_RING};
+        border-radius: 3px;
+    }}
+
+    QLabel#dashboardLegendDone {{
+        color: {COLOR_SOFT};
+        font-size: 11px;
+        font-weight: 600;
+        background: transparent;
+    }}
+
+    QLabel#dashboardLegendTodo {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 11px;
+        font-weight: 500;
+        background: transparent;
+    }}
+
+    QWidget#dashboardChart {{
+        background: transparent;
+    }}
+
+    QLabel#dashboardEmptyLabel {{
+        color: {COLOR_TEXT_COMPLETED};
+        font-size: 13px;
+        font-weight: 500;
+        background: transparent;
     }}
 
     QPushButton#historyNavButton {{

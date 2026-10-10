@@ -281,43 +281,46 @@ class MainWindow(QMainWindow):
         self._refresh_progress()
         paper_layout.addWidget(self._task_list, 1)
 
-        # 4. Bottom input dock: task input (right in RTL), grouped
-        # category/priority pair, add button (visual end). The pair shares
-        # one background with merged borders (see QSS). NOTE: no wrapper
-        # frame is used on purpose -- the frozen row test requires the
-        # priority selector and the text field to share one parent, so the
-        # grouping here is purely visual (flat DOM, zero inter-pair gap).
+        # 4. Bottom input dock (Phase 7H): the input CARD holds only the
+        # task text input and the add button. Category/priority selectors
+        # are direct dock children OUTSIDE the card, on its physical left
+        # (RTL: added after the card). Gaps come from the dock spacing.
         dock = QFrame(self._paper_surface)
         dock.setObjectName("taskInputDock")
         dock_layout = QHBoxLayout(dock)
-        dock_layout.setContentsMargins(6, 4, 6, 4)
-        dock_layout.setSpacing(0)
+        dock_layout.setContentsMargins(0, 0, 0, 0)
+        dock_layout.setSpacing(8)
 
-        # 1. Task Input (RIGHTMOST in RTL = added first with stretch)
-        self._task_input = TaskInput(parent=dock)
+        # 1. Input card (RIGHTMOST in RTL): text field + add button only.
+        card = QFrame(dock)
+        card.setObjectName("taskInputCard")
+        card_layout = QHBoxLayout(card)
+        card_layout.setContentsMargins(6, 4, 6, 4)
+        card_layout.setSpacing(6)
+
+        self._task_input = TaskInput(parent=card)
         self._task_input.task_submitted.connect(self._on_task_submitted)
-        dock_layout.addWidget(self._task_input, 1)
-        dock_layout.addSpacing(4)
+        card_layout.addWidget(self._task_input, 1)
 
-        # 2. Add Button
-        self._add_btn = QPushButton("+", dock)
+        self._add_btn = QPushButton("+", card)
         self._add_btn.setObjectName("taskAddButton")
         self._add_btn.setAccessibleName("إضافة المهمة")
         self._add_btn.setToolTip("إضافة المهمة")
         self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._add_btn.clicked.connect(self._on_add_button_clicked)
-        dock_layout.addWidget(self._add_btn)
+        card_layout.addWidget(self._add_btn)
 
-        # 3. Meta pair: Category + Priority, adjacent with no gap so the
-        # QSS merged-border rules render them as one pill. Category FIRST
-        # (so it's RIGHT of Priority in RTL).
+        dock_layout.addWidget(card, 1)
+
+        # 2. Selectors outside the card, on its physical left.
+        # Category FIRST (so it's RIGHT of Priority in RTL).
         self._category_selector = CategorySelector(
             self._categories, self._icon_provider, parent=dock
         )
         dock_layout.addWidget(self._category_selector)
         self._priority_selector = PrioritySelector(parent=dock)
         dock_layout.addWidget(self._priority_selector)
-        dock_layout.addSpacing(4)
+
         paper_layout.addWidget(dock)
 
     # -------------------------------------------------------------------------

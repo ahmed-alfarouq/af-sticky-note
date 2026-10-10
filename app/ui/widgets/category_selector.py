@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QComboBox, QSizePolicy, QWidget
 from app.core.models import DEFAULT_CATEGORY_ID, Category
 from app.ui.category_icons import CategoryIconProvider
 from app.ui.category_presentation import category_label, sort_categories
+from app.ui.widgets.combo_popup import fit_popup_to_contents
 
 __all__ = ["CategorySelector"]
 
@@ -45,6 +46,11 @@ class CategorySelector(QComboBox):
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self._icon_provider = icon_provider
         self.set_categories(categories)
+
+    def showPopup(self) -> None:  # noqa: N802 - Qt naming
+        """Widen the popup view to fit the widest item before showing."""
+        fit_popup_to_contents(self)
+        super().showPopup()
 
     # ------------------------------------------------------------------
     # Model

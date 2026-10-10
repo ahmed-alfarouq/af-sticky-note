@@ -446,11 +446,28 @@ def get_application_stylesheet() -> str:
         border-radius: 10px;
     }}
 
-    QFrame#taskInputDock QComboBox#prioritySelector,
-    QFrame#taskInputDock QComboBox#categorySelector {{
+    /* Bottom input dock (Phase 7H): a transparent wrapper holding the
+    input card plus the two standalone selectors. The card carries the
+    dock chrome; selectors keep compact stock-like styling with a modest
+    gap and no wrapper container. */
+    QFrame#taskInputDock {{
         background-color: transparent;
         border: none;
+    }}
+
+    QFrame#taskInputCard {{
+        background-color: {COLOR_CARD_SURFACE};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 10px;
+    }}
+
+    QFrame#taskInputDock QComboBox#prioritySelector,
+    QFrame#taskInputDock QComboBox#categorySelector {{
+        background-color: {COLOR_INPUT_BG};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 6px;
         min-width: 0px;
+        padding: 2px 6px;
     }}
 
     QFrame#taskInputDock QLineEdit#taskInputField {{
@@ -461,34 +478,6 @@ def get_application_stylesheet() -> str:
 
     QFrame#taskInputDock QLineEdit#taskInputField:focus {{
         border: none;
-    }}
-
-    /* Grouped category + priority pair inside the dock: the two combos
-    sit adjacent with zero layout gap and merged borders so they render
-    as one pill. (Flat DOM on purpose -- see main_window.py -- so these
-    descendant rules carry the grouping instead of a wrapper frame.) */
-    QFrame#taskInputDock QComboBox#categorySelector {{
-        background-color: {COLOR_INPUT_BG};
-        border: 1px solid {COLOR_CARD_BORDER};
-        border-left: none;
-        border-top-left-radius: 0px;
-        border-bottom-left-radius: 0px;
-        border-top-right-radius: 6px;
-        border-bottom-right-radius: 6px;
-        min-width: 0px;
-        padding: 2px 6px;
-    }}
-
-    QFrame#taskInputDock QComboBox#prioritySelector {{
-        background-color: {COLOR_INPUT_BG};
-        border: 1px solid {COLOR_CARD_BORDER};
-        border-right: none;
-        border-top-right-radius: 0px;
-        border-bottom-right-radius: 0px;
-        border-top-left-radius: 6px;
-        border-bottom-left-radius: 6px;
-        min-width: 0px;
-        padding: 2px 6px;
     }}
 
     QPushButton#taskAddButton {{
@@ -535,19 +524,35 @@ def get_application_stylesheet() -> str:
         border: 2px solid {COLOR_FOCUS_RING};
     }}
 
+    /* Completion must not recolor the row border (Issue 7): checked and
+    unchecked indicators share border/background; only the artwork differs
+    (per-checkbox override in TaskItem from the real right-icon asset). */
     QCheckBox::indicator:checked {{
         background-color: {COLOR_INPUT_BG};
-        border-color: {COLOR_SUCCESS};
+        border-color: {COLOR_TEXT_SECONDARY};
         image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='white' d='M3 6l2 2 4-4'/></svg>");
     }}
 
     QCheckBox::indicator:checked:hover {{
         background-color: #18202F;
-        border-color: {COLOR_SUCCESS};
+        border-color: {COLOR_TEXT_SECONDARY};
     }}
 
     QCheckBox::indicator:checked:focus {{
         border: 2px solid {COLOR_FOCUS_RING};
+    }}
+
+    /* Task-row completion control (Issue 7): the native indicator box is
+    collapsed to zero and the real 16px asset is shown as the button icon
+    instead (see TaskItem). The border therefore cannot change color on
+    check; only keyboard focus draws a ring. Other checkboxes (settings)
+    keep the standard indicator styling above. */
+    QCheckBox#taskCheckBox::indicator {{
+        width: 0px;
+        height: 0px;
+        border: none;
+        background: transparent;
+        image: none;
     }}
 
     /* Task Input Field */

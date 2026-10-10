@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import List, Optional, Sequence
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QAction, QActionGroup, QContextMenuEvent, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -106,10 +106,33 @@ class TaskItem(QFrame):
         self._checkbox = QCheckBox(self)
         self._checkbox.setChecked(task.is_completed)
         self._checkbox.setAccessibleName(f"تحديد إنجاز المهمة: {task.text}")
+        # Completion art (Issue 7): the native indicator box is collapsed
+        # to zero by QSS, and the real 16px right-icon asset is shown as
+        # the button icon instead -- checked state via QIcon On/Off modes,
+        # so checking can never recolor any border. Falls back to no icon
+        # (native empty box area) when the provider/asset is unavailable.
+        self._checkbox.setObjectName("taskCheckBox")
+        completion_icon = QIcon()
+        if self._icon_provider is not None:
+            asset = self._icon_provider.icon_for_key("right-icon")
+            if not asset.isNull():
+                blank = QPixmap(16, 16)
+                blank.fill(Qt.GlobalColor.transparent)
+                completion_icon.addPixmap(blank, QIcon.Mode.Normal, QIcon.State.Off)
+                completion_icon.addPixmap(
+                    asset.pixmap(16, 16), QIcon.Mode.Normal, QIcon.State.On
+                )
+        if not completion_icon.isNull():
+            self._checkbox.setIcon(completion_icon)
+            self._checkbox.setIconSize(QSize(16, 16))
         self._checkbox.toggled.connect(self._on_toggled)
 
         self._text_label = QLabel(to_display_text(task.text), self)
         self._text_label.setWordWrap(True)
+        # Explicit API mirror of the QSS qproperty-alignment rule: QLabel
+        # text anchoring is an alignment property, not a layout-direction
+        # effect, and must not depend on stylesheet parsing alone.
+        self._text_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._text_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._text_label.setToolTip(task.text)
         self._update_label_style(task.is_completed)

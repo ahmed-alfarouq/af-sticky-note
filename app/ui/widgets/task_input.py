@@ -15,6 +15,13 @@ class TaskInput(QLineEdit):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("taskInputField")
+        # Explicit widget API (not only QSS qproperty): QLineEdit text is
+        # anchored by its alignment property (default AlignLeft), while
+        # QWidget layout direction does NOT control text layout (Qt docs).
+        # AlignRight keeps Arabic, English, mixed, and numeric input starting
+        # from the right in this RTL interface; bidi ordering inside each
+        # run is untouched.
+        self.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.setPlaceholderText("+ اكتب مهمة جديدة ثم اضغط Enter...")
         self.setAccessibleName("حقل إدخال مهمة جديدة")
         self.setAccessibleDescription("اكتب نص المهمة واضغط زر الإدخال لإضافتها")

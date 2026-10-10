@@ -837,6 +837,15 @@ def test_new_task_row_contains_the_priority_selector(db_connection):
 
     assert window._priority_selector is not None
     assert window._priority_selector.parent() is not None
-    # The selector and the text field share one row, so they cannot drift apart.
-    assert window._priority_selector.parent() is window._task_input.parent()
+    # Input card, category selector, and priority selector all live in
+    # the same dock row, so they cannot drift apart. (Phase 7H: selectors
+    # sit outside the input card, hence dock-membership instead of the old
+    # shared-parent assertion -- same anti-drift intent.)
+    from PySide6.QtWidgets import QFrame
+    dock = window.findChild(QFrame, 'taskInputDock')
+    card = window.findChild(QFrame, 'taskInputCard')
+    assert dock is not None and card is not None
+    assert window._task_input.parent() is card
+    assert window._priority_selector.parent() is dock
+    assert window._category_selector.parent() is dock
     window.close()

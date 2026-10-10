@@ -6,16 +6,55 @@ without a GUI toolkit.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Dict, Optional
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QComboBox, QSizePolicy, QWidget
 
 from app.core.models import TaskPriority
 from app.ui.priority_presentation import PRIORITY_LABELS, PRIORITY_ORDER, priority_label
+from app.ui.widgets.combo_popup import fit_popup_to_contents
 
-__all__ = ["PrioritySelector", "PRIORITY_LABELS", "PRIORITY_ORDER", "priority_label"]
+__all__ = [
+    "PrioritySelector",
+    "PRIORITY_LABELS",
+    "PRIORITY_ORDER",
+    "priority_label",
+    "priority_dot_icon",
+]
+
+_DOT_ICON_CACHE: Dict[str, QIcon] = {}
+
+
+def _dot_icon(color_hex: str) -> QIcon:
+    """12px filled dot used as a dropdown decoration (cached per color)."""
+    cached = _DOT_ICON_CACHE.get(color_hex)
+    if cached is not None:
+        return cached
+    pixmap = QPixmap(12, 12)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    try:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(color_hex))
+        painter.drawEllipse(1, 1, 10, 10)
+    finally:
+        painter.end()
+    icon = QIcon(pixmap)
+    _DOT_ICON_CACHE[color_hex] = icon
+    return icon
+
+
+def priority_dot_icon(priority: TaskPriority) -> QIcon:
+    """Cached dropdown dot icon: red HIGH, calm blue MEDIUM, blue-gray LOW."""
+    colors = {
+        TaskPriority.HIGH: "#E57373",
+        TaskPriority.MEDIUM: "#4F7CAC",
+        TaskPriority.LOW: "#98A2B3",
+    }
+    return _dot_icon(colors.get(priority, "#98A2B3"))
 
 
 class PrioritySelector(QComboBox):
@@ -47,8 +86,14 @@ class PrioritySelector(QComboBox):
             item = model.item(row)
             if item is not None and item.data(Qt.ItemDataRole.UserRole) == TaskPriority.HIGH:
                 item.setForeground(QColor("#E57373"))  # Red
+            item.setIcon(priority_dot_icon(PRIORITY_ORDER[row]))
 
         self.setCurrentIndex(self._index_of(TaskPriority.MEDIUM))
+
+    def showPopup(self) -> None:  # noqa: N802 - Qt naming
+        """Widen the popup view to fit the widest item before showing."""
+        fit_popup_to_contents(self)
+        super().showPopup()
 
     # ------------------------------------------------------------------
     # Value access

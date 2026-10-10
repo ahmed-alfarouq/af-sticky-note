@@ -117,14 +117,19 @@ class TaskList(QScrollArea):
         Called by the coordinator after persisting the toggle; moves the
         row between the active and completed sections without recreating it.
         """
-        for item in self._items.values():
-            self._layout.removeWidget(item)
-        self._layout.removeWidget(self._section_label)
         self._relayout()
 
     def _relayout(self) -> None:
-        """Order rows (incomplete, section label, completed) before stretch."""
+        """Order rows (incomplete, section label, completed) before stretch.
+
+        All row widgets are detached first: re-inserting widgets that are
+        already laid out would corrupt the trailing-stretch invariant and
+        push rows to the bottom (leaving a gap above the list).
+        """
         ordered = sorted(self._items.values(), key=lambda item: _view_order_key(item._task))
+        for item in ordered:
+            self._layout.removeWidget(item)
+        self._layout.removeWidget(self._section_label)
         widgets = [item for item in ordered if not item._task.is_completed]
         completed = [item for item in ordered if item._task.is_completed]
         if completed:

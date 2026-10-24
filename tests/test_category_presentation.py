@@ -65,7 +65,7 @@ def test_presentation_module_has_no_hardcoded_category_registry():
 def test_service_lists_active_categories_in_order(db_connection):
     service = CategoryService(CategoryRepository(db_connection))
     assert [c.id for c in service.list_active_categories()] == [
-        "religion", "work", "life", "general",
+        "general", "work", "personal", "study", "health", "home", "religion", "life",
     ]
 
 
@@ -73,7 +73,9 @@ def test_service_excludes_inactive_from_active_list(db_connection):
     repo = CategoryRepository(db_connection)
     repo.set_active("life", False)
     service = CategoryService(repo)
-    assert [c.id for c in service.list_active_categories()] == ["religion", "work", "general"]
+    assert [c.id for c in service.list_active_categories()] == [
+        "general", "work", "personal", "study", "health", "home", "religion",
+    ]
 
 
 def test_service_get_category(db_connection):

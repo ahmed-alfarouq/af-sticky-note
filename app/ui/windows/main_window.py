@@ -29,12 +29,15 @@ import logging
 from typing import Any, Callable, Optional, Protocol, Sequence, Tuple
 
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QIcon, QMouseEvent
+from PySide6.QtGui import QAction, QColor, QContextMenuEvent, QIcon, QKeySequence, QMouseEvent, QShortcut
 from PySide6.QtWidgets import (
     QFrame,
+    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMenu,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -48,12 +51,16 @@ from app.core.services.history_service import HistoryService
 from app.core.services.report_service import ReportService
 from app.core.services.task_service import TaskService
 from app.infrastructure.paths import get_logo_path
+from app.platform.interfaces import DesktopWindowController
+from app.ui import theme
 from app.ui.category_icons import CategoryIconProvider
 from app.ui.geometry_manager import WindowGeometryManager
 from app.ui.note_shape import NoteShape, build_note_shape
+from app.ui.pin_state import PinStateManager
 from app.ui.styles.app_style import get_application_stylesheet
-from app.ui.widgets.category_selector import CategorySelector
+from app.ui.widgets.category_chip import CategoryChip
 from app.ui.widgets.date_header import DateHeaderWidget
+from app.ui.widgets.icon_button import IconButton
 from app.ui.widgets.paper_surface import PaperSurface, shape_to_region
 from app.ui.widgets.priority_selector import PrioritySelector
 from app.ui.widgets.quote_widget import QuoteWidget
@@ -80,6 +87,10 @@ class MainWindow(QMainWindow):
     #: ever collides with the organic bottom edge of the paper.
     PAPER_BOTTOM_MARGIN = 18
 
+    #: Transparent outer margin around the paper surface, inside which the
+    #: drop shadow paints (v3 §2). Never used for content.
+    SHADOW_MARGIN = 32
+
     def __init__(
         self,
         day: Day,
@@ -94,6 +105,9 @@ class MainWindow(QMainWindow):
         category_service: Optional[CategoryService] = None,
         icon_provider: Optional[CategoryIconProvider] = None,
         report_service: Optional[ReportService] = None,
+        window_controller: Optional[DesktopWindowController] = None,
+        pin_state_manager: Optional[PinStateManager] = None,
+        on_carry_forward_requested: Optional[Callable[[], int]] = None,
     ) -> None:
         super().__init__(parent)
         self._day = day
@@ -106,6 +120,12 @@ class MainWindow(QMainWindow):
         self._categories: Sequence[Category] = (
             category_service.list_active_categories() if category_service is not None else ()
         )
+        # Full metadata for read-only surfaces (History): inactive
+        # categories must stay identifiable there, while new-task selection
+        # above stays active-only.
+        self._all_categories: Sequence[Category] = (
+            category_service.list_all_categories() if category_service is not None else ()
+        )
         # The icon provider is filesystem-only (no DB), so a default one is
         # always safe to construct.
         self._icon_provider = icon_provider or CategoryIconProvider()
@@ -113,6 +133,13 @@ class MainWindow(QMainWindow):
         self._history_service = history_service
         self._startup_manager = startup_manager
         self._on_exit_requested = on_exit_requested
+        self._window_controller = window_controller
+        # Pinned is the historical default (desktop tool window). The stored
+        # flag only ever changes through _apply_pin_state after the platform
+        # confirms the new state.
+        self._pin_manager = pin_state_manager or PinStateManager()
+        self._pinned = self._pin_manager.is_pinned()
+        self._on_carry_forward_requested_cb = on_carry_forward_requested
         self._settings_window: Optional[QWidget] = None
 
         # Dragging state
@@ -128,16 +155,20 @@ class MainWindow(QMainWindow):
 
         # Configure desktop widget window flags:
         # - Qt.FramelessWindowHint: remove OS title bar and borders for sticky note look
-        # - Qt.Tool: classifies the window as a tool/utility window before native realization,
-        #   preventing taskbar button creation and Win+D shell minimize-all broadcasts
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
-        )
+        # - Qt.Tool (pinned only): classifies the window as a tool/utility window
+        #   before native realization, preventing taskbar button creation and
+        #   Win+D shell minimize-all broadcasts
+        if self._pinned:
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
+            )
+        else:
+            self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         # Translucent background allows rounded CSS paper corners without artifacts
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(320, 420)
+        self.setMinimumSize(320, 480)
         self.setAccessibleName("نافذة الملاحظة اليومية دايلي ستيكي")
 
         # Set application window icon from bundled logo if present
@@ -179,12 +210,14 @@ class MainWindow(QMainWindow):
         quote_text: Optional[str],
         initial_tasks: Sequence[Task],
     ) -> None:
-        # Outer board layout. No outer margin: the paper silhouette is the
-        # window itself, so the window mask can follow it exactly. An inset
-        # paper would leave an invisible-but-clickable frame around the note
-        # and would break edge/corner resizing.
+        # Outer board layout. The 32 px transparent margin frames the paper
+        # on every side: the drop shadow paints into it and clicks pass
+        # through it to whatever is beneath (the window mask follows the
+        # paper, not the outer rect).
         outer_layout = QVBoxLayout(self._central_widget)
-        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setContentsMargins(
+            self.SHADOW_MARGIN, self.SHADOW_MARGIN, self.SHADOW_MARGIN, self.SHADOW_MARGIN
+        )
         outer_layout.setSpacing(0)
 
         # Sticky Note paper surface (organic silhouette, painted by PaperSurface)
@@ -199,7 +232,8 @@ class MainWindow(QMainWindow):
         paper_layout.setContentsMargins(16, 12, 16, self.PAPER_BOTTOM_MARGIN)
         paper_layout.setSpacing(12)
 
-        # 1. Decorative Pin Header (Designated Drag Area) with Right-Side Control Icons
+        # 1. Top bar (v3 §4): Pin button, Grip, Actions group. Visual order
+        # right -> left; the bar is a drag area except on the buttons.
         self._header_frame = QFrame(self._paper_surface)
         self._header_frame.setObjectName("headerFrame")
         self._header_frame.setCursor(Qt.CursorShape.ArrowCursor)
@@ -208,48 +242,54 @@ class MainWindow(QMainWindow):
         pin_row.setContentsMargins(0, 0, 0, 4)
         pin_row.setSpacing(4)
 
-        # Right-side Action Buttons: ordered Exit -> History -> Settings
-        # 1. Exit Button
-        self._exit_btn = QPushButton("✕", self._header_frame)
-        self._exit_btn.setObjectName("exitButton")
-        self._exit_btn.setAccessibleName("إغلاق التطبيق نهائياً")
-        self._exit_btn.setToolTip("إغلاق التطبيق نهائياً")
-        self._exit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._exit_btn.clicked.connect(self._on_exit_clicked)
-        pin_row.addWidget(self._exit_btn)
+        # Rightmost: pin toggle.
+        self._pin_btn = IconButton("pin", parent=self._header_frame)
+        self._pin_btn.setObjectName("pinButton")
+        self._pin_btn.setAccessibleName("تثبيت")
+        self._pin_btn.setToolTip("تثبيت على سطح المكتب")
+        self._pin_btn.clicked.connect(self._on_pin_clicked)
+        pin_row.addWidget(self._pin_btn)
 
-        # 2. History button (paper/document record icon)
-        self._history_btn = QPushButton("📄", self._header_frame)
-        self._history_btn.setObjectName("headerIconButton")
-        self._history_btn.setAccessibleName("فتح السجل اليومي")
-        self._history_btn.setToolTip("السجل")
-        self._history_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._history_btn.clicked.connect(self._on_history_requested)
-        pin_row.addWidget(self._history_btn)
+        # Balancing spacer so the grip stays optically centered: the actions
+        # group is 3*36 + 2*2 wide, the pin 36, so 76 px evens the sides.
+        pin_row.addSpacing(76)
+        pin_row.addStretch(1)
 
-        # 3. Settings button
-        self._settings_btn = QPushButton("⚙", self._header_frame)
+        # Center: drag grip (affordance only, never focusable).
+        self._grip = QLabel(self._header_frame)
+        self._grip.setObjectName("gripPill")
+        self._grip.setFixedSize(32, 4)
+        self._grip.setAccessibleName("")
+        self._grip.setCursor(Qt.CursorShape.OpenHandCursor)
+        self._grip.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        pin_row.addWidget(self._grip)
+
+        pin_row.addStretch(1)
+
+        # Leftmost: Archive, Settings, Close.
+        self._archive_btn = IconButton("archive", parent=self._header_frame)
+
+        self._archive_btn.setObjectName("headerIconButton")
+        self._archive_btn.setAccessibleName("الأرشيف")
+        self._archive_btn.setToolTip("الأرشيف")
+        self._archive_btn.clicked.connect(self._on_history_requested)
+        pin_row.addWidget(self._archive_btn)
+
+        self._settings_btn = IconButton("settings", parent=self._header_frame)
         self._settings_btn.setObjectName("headerIconButton")
-        self._settings_btn.setAccessibleName("فتح الإعدادات")
-        self._settings_btn.setToolTip("الإعدادات")
-        self._settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._settings_btn.setAccessibleName("إعدادات")
+        self._settings_btn.setToolTip("إعدادات")
         self._settings_btn.clicked.connect(self._on_settings_requested)
         pin_row.addWidget(self._settings_btn)
 
-        # Stretch between the right-side control group and the pin
-        pin_row.addStretch(1)
+        self._close_btn = IconButton("close", parent=self._header_frame)
+        self._close_btn.setObjectName("headerIconButton")
+        self._close_btn.setAccessibleName("إغلاق")
+        self._close_btn.setToolTip("إغلاق")
+        self._close_btn.clicked.connect(self._on_exit_clicked)
+        pin_row.addWidget(self._close_btn)
 
-        # Decorative Pin Widget in Center
-        self._pin_widget = QLabel(self._header_frame)
-        self._pin_widget.setObjectName("pinWidget")
-        self._pin_widget.setAccessibleName("دبوس تثبيت الملاحظة")
-        pin_row.addWidget(self._pin_widget)
-
-        # Left stretch to balance the row
-        pin_row.addStretch(1)
-
-        # Symmetrical spacer matching controls group width (22*3 + 4*2 = 74px) so the pin remains centered
-        pin_row.addSpacing(74)
+        self._refresh_pin_visuals()
 
         paper_layout.addWidget(self._header_frame)
 
@@ -271,6 +311,9 @@ class MainWindow(QMainWindow):
         )
         self._task_list.task_category_change_requested.connect(
             self._on_task_category_change_requested
+        )
+        self._task_list.task_inline_edit_committed.connect(
+            self._on_task_inline_edit_committed
         )
         self._task_list.clear_completed_requested.connect(self._on_clear_completed_requested)
         self._task_list.history_requested.connect(self._on_history_requested)
@@ -308,14 +351,19 @@ class MainWindow(QMainWindow):
         self._add_btn.setToolTip("إضافة المهمة")
         self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._add_btn.clicked.connect(self._on_add_button_clicked)
+        # Disabled-when-empty (v3 §8.1): whitespace-only input disables the
+        # button; the Enter path keeps its own empty-text guard.
+        self._add_btn.setEnabled(False)
+        self._task_input.textChanged.connect(self._on_input_text_changed)
         card_layout.addWidget(self._add_btn)
 
         dock_layout.addWidget(card, 1)
 
-        # 2. Selectors outside the card, on its physical left.
-        # Category FIRST (so it's RIGHT of Priority in RTL).
-        self._category_selector = CategorySelector(
-            self._categories, self._icon_provider, parent=dock
+        # 2. Category chip (v3 §8.2) + priority selector, on the physical
+        # left of the card. The chip opens the custom dropdown (§9); the
+        # priority combo stays until its own phase.
+        self._category_selector = CategoryChip(
+            self._categories, parent=dock
         )
         dock_layout.addWidget(self._category_selector)
         self._priority_selector = PrioritySelector(parent=dock)
@@ -323,12 +371,51 @@ class MainWindow(QMainWindow):
 
         paper_layout.addWidget(dock)
 
+        # Documented shortcuts (v3 §11), window scope: they fire only while
+        # this window is active, never while a popup/menu owns input, and
+        # neither sequence collides with text-editing keys. Created once.
+        self._focus_input_shortcut = QShortcut(QKeySequence("Ctrl+N"), self)
+        self._focus_input_shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+        self._focus_input_shortcut.activated.connect(self._task_input.setFocus)
+        self._toggle_pin_shortcut = QShortcut(QKeySequence("Ctrl+Shift+P"), self)
+        self._toggle_pin_shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+        self._toggle_pin_shortcut.activated.connect(self._on_pin_clicked)
+        self._rechain_window_tab_order()
+
+    def _rechain_window_tab_order(self) -> None:
+        """Explicit keyboard chain (v3 §11): pin, archive, settings, close,
+        rows, input, add, category chip, priority selector.
+
+        Row ends are anchored through the list, which re-links them on every
+        relayout, so this runs once at setup: no per-mutation calls needed.
+        Pointer-only, no timers or signals.
+        """
+        QWidget.setTabOrder(self._pin_btn, self._archive_btn)
+        QWidget.setTabOrder(self._archive_btn, self._settings_btn)
+        QWidget.setTabOrder(self._settings_btn, self._close_btn)
+        self._task_list.set_chain_anchors(self._close_btn, self._task_input)
+        QWidget.setTabOrder(self._task_input, self._add_btn)
+        QWidget.setTabOrder(self._add_btn, self._category_selector)
+        QWidget.setTabOrder(self._category_selector, self._priority_selector)
+
+        # Drop shadow for the paper, painted into the transparent margin.
+        # Created once; only its parameters change with the pin state.
+        self._shadow_effect = QGraphicsDropShadowEffect(self._paper_surface)
+        self._paper_surface.setGraphicsEffect(self._shadow_effect)
+        self._apply_shadow_variant()
+
     # -------------------------------------------------------------------------
     # Organic paper silhouette: shape + window mask lifecycle
     # -------------------------------------------------------------------------
 
+    def _paper_rect(self):
+        """Paper geometry in window coordinates (inside the shadow margin)."""
+        pos = self._paper_surface.pos()
+        size = self._paper_surface.size()
+        return (pos.x(), pos.y(), size.width(), size.height())
+
     def _update_note_shape(self) -> None:
-        """Rebuild the paper silhouette for the current window size.
+        """Rebuild the paper silhouette for the current paper size.
 
         This is the single place where the shape is (re)generated, and it is
         driven by geometry changes only:
@@ -342,7 +429,8 @@ class MainWindow(QMainWindow):
         repeated calls (e.g. several resize events while dragging a window
         edge, or a show after a resize) cost nothing.
         """
-        size = (self.width(), self.height())
+        _, _, width, height = self._paper_rect()
+        size = (width, height)
         if self._note_shape is not None and size == self._note_shape_size:
             return
 
@@ -362,17 +450,17 @@ class MainWindow(QMainWindow):
         """Make the physical OS window follow the paper silhouette.
 
         The mask is derived from the exact same :class:`NoteShape` the paper
-        is painted from, so the visible note, its border and the clickable
-        window region always agree. Because the paper spans the whole window
-        (only the rounded top corners and the bottom notches are excluded),
-        all four resize edges and all four corners stay usable.
+        is painted from, translated to the paper's window position (the paper
+        sits inside the transparent shadow margin, so the margin stays
+        click-through). Visible note, border and clickable region agree.
 
         Called from :meth:`_update_note_shape` only -- never while painting.
         """
         if self._note_shape is None:
             return
         try:
-            self.setMask(shape_to_region(self._note_shape))
+            x, y, _, _ = self._paper_rect()
+            self.setMask(shape_to_region(self._note_shape).translated(x, y))
         except Exception as exc:  # pragma: no cover - defensive, platform specific
             logger.warning("Failed to apply the organic paper window mask: %s", exc)
 
@@ -385,6 +473,108 @@ class MainWindow(QMainWindow):
         """Refresh the silhouette once the window is actually sized and shown."""
         super().showEvent(event)
         self._update_note_shape()
+
+    # -------------------------------------------------------------------------
+    # Pin state (v3 §4.1)
+    # -------------------------------------------------------------------------
+
+    def is_pinned(self) -> bool:
+        """Current pinned state (desktop-widget mode when True)."""
+        return self._pinned
+
+    def _refresh_pin_visuals(self) -> None:
+        """Sync the pin button with the current state (never persists)."""
+        if self._pinned:
+            self._pin_btn.set_icon_key("pin_active")
+            self._pin_btn.set_state_colors(theme.AMBER, theme.AMBER, theme.TEXT_DISABLED)
+            self._pin_btn.setToolTip("إلغاء التثبيت")
+            self._pin_btn.setAccessibleName("إلغاء التثبيت")
+            self._pin_btn.setProperty("active", True)
+        else:
+            self._pin_btn.set_icon_key("pin")
+            self._pin_btn.set_state_colors(theme.TEXT_SECONDARY, theme.TEXT, theme.TEXT_DISABLED)
+            self._pin_btn.setToolTip("تثبيت على سطح المكتب")
+            self._pin_btn.setAccessibleName("تثبيت")
+            self._pin_btn.setProperty("active", False)
+        self._pin_btn.style().unpolish(self._pin_btn)
+        self._pin_btn.style().polish(self._pin_btn)
+
+    def _apply_shadow_variant(self) -> None:
+        """Drop-shadow parameters for the current pin state (v3 §2).
+
+        No timers or animation: applied once per state change.
+        """
+        if self._pinned:
+            self._shadow_effect.setBlurRadius(24)
+            self._shadow_effect.setOffset(0, 8)
+            self._shadow_effect.setColor(QColor(0, 0, 0, 89))
+        else:
+            self._shadow_effect.setBlurRadius(60)
+            self._shadow_effect.setOffset(0, 24)
+            self._shadow_effect.setColor(QColor(0, 0, 0, 115))
+
+    def _on_pin_clicked(self) -> None:
+        """Toggle the pinned state through the platform layer."""
+        if not self._apply_pin_state(not self._pinned):
+            QMessageBox.warning(
+                self,
+                "تعذر تغيير التثبيت",
+                "تعذر تطبيق حالة التثبيت على سطح المكتب.",
+            )
+
+    def _apply_pin_state(self, pinned: bool) -> bool:
+        """Apply a pin state end to end; roll back the visuals on failure.
+
+        Window flags are switched first (pinned = Tool, unpinned = normal),
+        then the platform layer applies desktop/taskbar behavior for the new
+        HWND. Anything but a confirmed platform success keeps the previous
+        state: visuals restored, nothing persisted. Returns True on success.
+        """
+        if pinned == self._pinned:
+            self._refresh_pin_visuals()
+            self._apply_shadow_variant()
+            return True
+
+        previous = self._pinned
+        try:
+            self.hide()
+            if pinned:
+                self.setWindowFlags(
+                    Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
+                )
+            else:
+                self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+            self.show()
+            hwnd = int(self.winId())
+            applied = (
+                self._window_controller.set_pinned(hwnd, pinned)
+                if self._window_controller is not None
+                else False
+            )
+            if not applied:
+                raise RuntimeError("platform layer rejected the pin state")
+        except Exception as exc:
+            logger.error("Failed to apply pin state %s: %s", pinned, exc)
+            try:
+                self.hide()
+                if previous:
+                    self.setWindowFlags(
+                        Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
+                    )
+                else:
+                    self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+                self.show()
+            except Exception as rollback_exc:  # pragma: no cover - defensive
+                logger.error("Pin rollback failed: %s", rollback_exc)
+            self._refresh_pin_visuals()
+            self._apply_shadow_variant()
+            return False
+
+        self._pinned = pinned
+        self._refresh_pin_visuals()
+        self._apply_shadow_variant()
+        self._pin_manager.save_pinned(pinned)
+        return True
 
     def refresh_daily_view(
         self,
@@ -431,10 +621,11 @@ class MainWindow(QMainWindow):
             if created_task is not None:
                 self._task_list.add_task(created_task)
                 self._task_input.clear()
-                # Reset the selectors so the next task starts from the neutral
-                # defaults instead of silently inheriting the previous choice.
+                # Priority resets to neutral; the category is KEPT for fast
+                # batch entry (v3 §8.1). Clearing the input re-disables the
+                # add button through the textChanged wiring below.
                 self._priority_selector.set_priority(TaskPriority.MEDIUM)
-                self._category_selector.reset_to_default()
+                self._task_list.ensure_task_visible(created_task.id)
                 self._refresh_progress()
             # Retain focus in input field whether text was created or empty
             self._task_input.setFocus()
@@ -445,6 +636,10 @@ class MainWindow(QMainWindow):
     def _on_add_button_clicked(self) -> None:
         """Submit the current input text through the same creation path."""
         self._on_task_submitted(self._task_input.text())
+
+    def _on_input_text_changed(self, text: str) -> None:
+        """Enable the add button only for non-blank input."""
+        self._add_btn.setEnabled(bool(text.strip()))
 
     def _on_task_completed_toggled(self, task_id: int, is_completed: bool) -> None:
         """Handle checkbox toggle from TaskList / TaskItem."""
@@ -459,8 +654,46 @@ class MainWindow(QMainWindow):
             # active/completed sections and refresh the progress ring.
             self._task_list.refresh_task_order()
             self._refresh_progress()
+            self._move_focus_after_toggle(task_id)
         except Exception as exc:
             logger.error("Failed to toggle completion for task %d: %s", task_id, exc)
+
+    def _move_focus_after_toggle(self, task_id: int) -> None:
+        """Focus the next open task, or the input when none remains (v3 §7.3).
+
+        "Next" is positional in the stored order, at or after the toggled
+        row: completing a middle task moves to its successor; completing the
+        last open task (or finding no open tasks at all) moves to the add
+        input, ready for the next entry; uncompleting keeps focus on the row
+        itself, which is open again. Only visible, live rows are targeted;
+        anything else falls through to the input. Completion, order, and
+        records are untouched -- focus only.
+        """
+        if self._day.id is None:
+            return
+        try:
+            open_tasks = [
+                task for task in self._task_service.get_today_tasks(self._day.id)
+                if not task.is_completed
+            ]
+        except Exception as exc:
+            logger.error("Failed to resolve focus target after toggle: %s", exc)
+            return
+        anchor = None
+        item = self._task_list._items.get(task_id)
+        if item is not None:
+            anchor = (item._task.position, item._task.id or 0)
+        ordered = sorted(open_tasks, key=lambda task: (task.position, task.id or 0))
+        candidates = [
+            task for task in ordered
+            if anchor is None or (task.position, task.id or 0) >= anchor
+        ]
+        for task in candidates:
+            target = self._task_list._items.get(task.id)
+            if target is not None and target.isVisible():
+                target._checkbox.setFocus()
+                return
+        self._task_input.setFocus()
 
     def _on_task_edit_requested(self, task_id: int) -> None:
         """Open edit dialog and persist updated task text/category/priority.
@@ -541,6 +774,20 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             logger.error("Failed to change category for task %d: %s", task_id, exc)
 
+    def _on_task_inline_edit_committed(self, task_id: int, new_text: str) -> None:
+        """Persist an inline title edit through the single update path.
+
+        Only the text column changes: identity, day, priority, completion,
+        category, position, source, and timestamps handling stay with the
+        service/repository. Blank input never reaches here (the row cancels
+        it), and the service rejects it again defensively.
+        """
+        try:
+            if self._task_service.update_task_text(task_id, new_text):
+                self._task_list.update_task_text(task_id, new_text)
+        except Exception as exc:
+            logger.error("Failed to save inline edit for task %d: %s", task_id, exc)
+
     def _on_task_delete_requested(self, task_id: int) -> None:
         """Handle deletion of a specific task."""
         try:
@@ -574,6 +821,8 @@ class MainWindow(QMainWindow):
                 history_service=self._history_service,
                 initial_date=self._day.date,
                 parent=self,
+                categories=self._all_categories,
+                icon_provider=self._icon_provider,
             )
             history_win.exec()
         except Exception as exc:
@@ -627,27 +876,125 @@ class MainWindow(QMainWindow):
             self.close()
 
     # -------------------------------------------------------------------------
+    # Pinned-mode application menu (v3 §10)
+    # -------------------------------------------------------------------------
+
+    def _on_carry_forward_requested(self) -> None:
+        """Manually carry yesterday's leftovers into today (idempotent).
+
+        Same-day catch-up for a rollover that never ran (e.g. the app was
+        closed at midnight and no transition has fired yet). Delegates to
+        the injected carry-forward operation, then reloads today's rows and
+        progress from the task service. Without an injected operation the
+        menu action warns instead of silently doing nothing.
+        """
+        if self._day.id is None:
+            return
+        if self._on_carry_forward_requested_cb is None:
+            logger.warning("Carry-forward requested without an injected operation")
+            return
+        try:
+            carried = self._on_carry_forward_requested_cb() or 0
+            logger.info("Carried %d task(s) forward into %s", carried, self._day.date)
+            self._task_list.set_tasks(self._task_service.get_today_tasks(self._day.id))
+            self._refresh_progress()
+        except Exception as exc:
+            logger.error("Failed to carry tasks forward for day %s: %s", self._day.date, exc)
+
+    def _on_open_app_data_requested(self) -> None:
+        """Open the per-user application-data folder in the file manager."""
+        try:
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+
+            from app.infrastructure.paths import get_app_data_dir
+
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(get_app_data_dir())))
+        except Exception as exc:
+            logger.error("Failed to open application data folder: %s", exc)
+
+    def _build_window_menu(self) -> QMenu:
+        """Assemble the pinned-mode application menu (fresh instance per open).
+
+        Item order, separator placement, and pin-label state follow v3 §10.
+        Every action routes to an existing handler exactly once; dismissing
+        the menu triggers nothing. Rows keep their own context menu, which
+        is built and tested separately.
+        """
+        menu = QMenu(self)
+        menu.setObjectName("appContextMenu")
+        menu.setAccessibleName("قائمة التطبيق")
+        menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        menu.setMinimumWidth(220)
+
+        add_action = QAction("إضافة مهمة", menu)
+        add_action.triggered.connect(lambda: self._task_input.setFocus())
+        menu.addAction(add_action)
+
+        carry_action = QAction("نقل غير المكتمل", menu)
+        carry_action.triggered.connect(self._on_carry_forward_requested)
+        menu.addAction(carry_action)
+
+        pin_action = QAction(
+            "إلغاء التثبيت" if self._pinned else "تثبيت", menu
+        )
+        pin_action.triggered.connect(self._on_pin_clicked)
+        menu.addAction(pin_action)
+
+        settings_action = QAction("إعدادات", menu)
+        settings_action.triggered.connect(self._on_settings_requested)
+        menu.addAction(settings_action)
+
+        menu.addSeparator()
+
+        data_action = QAction("فتح بيانات التطبيق", menu)
+        data_action.triggered.connect(self._on_open_app_data_requested)
+        menu.addAction(data_action)
+
+        exit_action = QAction("إغلاق التطبيق", menu)
+        exit_action.triggered.connect(self._on_exit_clicked)
+        menu.addAction(exit_action)
+
+        return menu
+
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
+        """Show the pinned-mode application menu for window-level clicks.
+
+        Task rows and the task list handle their own context menus and
+        accept those events, so only clicks elsewhere reach this handler.
+        """
+        menu = self._build_window_menu()
+        menu.exec(event.globalPos())
+        event.accept()
+
+    # -------------------------------------------------------------------------
     # Dragging & Resizing Event Handlers (Phase 5G-A)
     # -------------------------------------------------------------------------
 
     RESIZE_BORDER_WIDTH = 8
 
     def _determine_resize_edges(self, global_pos: QPoint) -> int:
-        """Calculate active resize edge bitmask for a given screen point."""
-        rect = self.geometry()
+        """Calculate active resize edge bitmask for a given screen point.
+
+        Edges follow the paper rect (inside the transparent shadow margin):
+        the margin itself is click-through, so grabbing works on the paper.
+        """
+        paper = self._paper_surface.geometry()
+        left = self.mapToGlobal(paper.topLeft())
+        right = self.mapToGlobal(paper.bottomRight())
         x, y = global_pos.x(), global_pos.y()
         edges = 0
 
         # Left / Right
-        if abs(x - rect.left()) <= self.RESIZE_BORDER_WIDTH:
+        if abs(x - left.x()) <= self.RESIZE_BORDER_WIDTH:
             edges |= 1  # Left
-        elif abs(x - rect.right()) <= self.RESIZE_BORDER_WIDTH:
+        elif abs(x - right.x()) <= self.RESIZE_BORDER_WIDTH:
             edges |= 2  # Right
 
         # Top / Bottom
-        if abs(y - rect.top()) <= self.RESIZE_BORDER_WIDTH:
+        if abs(y - left.y()) <= self.RESIZE_BORDER_WIDTH:
             edges |= 4  # Top
-        elif abs(y - rect.bottom()) <= self.RESIZE_BORDER_WIDTH:
+        elif abs(y - right.y()) <= self.RESIZE_BORDER_WIDTH:
             edges |= 8  # Bottom
 
         return edges
@@ -686,7 +1033,7 @@ class MainWindow(QMainWindow):
                 local_pos = self._header_frame.mapFromGlobal(global_pos)
                 if header_rect.contains(local_pos):
                     # If clicked specifically on any header control buttons, let the button handle click
-                    for btn_attr in ("_settings_btn", "_history_btn", "_exit_btn"):
+                    for btn_attr in ("_pin_btn", "_archive_btn", "_settings_btn", "_close_btn"):
                         btn = getattr(self, btn_attr, None)
                         if btn is not None and btn.geometry().contains(local_pos):
                             super().mousePressEvent(event)

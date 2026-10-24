@@ -22,8 +22,8 @@ class TaskInput(QLineEdit):
         # from the right in this RTL interface; bidi ordering inside each
         # run is untouched.
         self.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.setPlaceholderText("+ اكتب مهمة جديدة ثم اضغط Enter...")
-        self.setAccessibleName("حقل إدخال مهمة جديدة")
+        self.setPlaceholderText("اكتب مهمة جديدة…")
+        self.setAccessibleName("مهمة جديدة")
         self.setAccessibleDescription("اكتب نص المهمة واضغط زر الإدخال لإضافتها")
         self.returnPressed.connect(self._on_return_pressed)
 

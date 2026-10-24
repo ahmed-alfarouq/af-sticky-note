@@ -116,7 +116,9 @@ def test_category_breakdown_uses_stored_metadata(db_connection):
     _seed_week(db_connection)
     report = _service(db_connection).get_range_report("2026-10-05", "2026-10-11")
     by_id = {row.category_id: row for row in report.category_reports}
-    assert set(by_id) == {"religion", "work", "life", "general"}
+    assert set(by_id) == {
+        "general", "work", "personal", "study", "health", "home", "religion", "life",
+    }
     assert [(r.total, r.completed, r.incomplete) for r in
             (by_id["work"], by_id["religion"], by_id["life"], by_id["general"])] == [
         (3, 2, 1), (2, 1, 1), (2, 2, 0), (3, 1, 2),
@@ -125,7 +127,8 @@ def test_category_breakdown_uses_stored_metadata(db_connection):
     assert by_id["work"].icon_key == "work"
     assert by_id["work"].completion_percentage == 67  # round(2/3*100)
     assert [r.category_id for r in report.category_reports] == [
-        "religion", "work", "life", "general"]  # sort_order, not alpha/query order
+        "general", "work", "personal", "study", "health", "home",
+        "religion", "life"]  # sort_order, not alpha/query order
 
 
 def test_daily_rows_chronological_with_zero_days(db_connection):
@@ -147,7 +150,7 @@ def test_unrecorded_days_appear_with_zeros(db_connection):
     assert [row.date for row in report.daily_reports] == ["2026-01-01", "2026-01-02", "2026-01-03"]
     assert all(row.total == 0 for row in report.daily_reports)
     # Known categories still listed with zeros (stable dashboard shape).
-    assert len(report.category_reports) == 4
+    assert len(report.category_reports) == 8
     assert all(row.total == 0 for row in report.category_reports)
 
 

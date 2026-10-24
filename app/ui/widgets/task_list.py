@@ -3,12 +3,13 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QContextMenuEvent
-from PySide6.QtWidgets import QFrame, QLabel, QMenu, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QLabel, QMenu, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from app.core.models import Category, Task, TaskPriority
 from app.ui.category_icons import CategoryIconProvider
+from app.ui.icons import icon as vector_icon
 from app.ui.widgets.task_item import TaskItem
 
 
@@ -29,6 +30,7 @@ class TaskList(QScrollArea):
     task_delete_requested = Signal(int)         # task_id
     task_priority_change_requested = Signal(int, object)  # task_id, TaskPriority
     task_category_change_requested = Signal(int, str)  # task_id, category_id
+    task_inline_edit_committed = Signal(int, str)  # task_id, trimmed new text
     clear_completed_requested = Signal()        # emit to clear completed tasks for today
     history_requested = Signal()                # emit to open History UI
     dashboard_requested = Signal()              # emit to open weekly dashboard
@@ -49,22 +51,51 @@ class TaskList(QScrollArea):
         self._container = QWidget(self)
         self._container.setObjectName("taskListContainer")
         self._layout = QVBoxLayout(self._container)
-        self._layout.setContentsMargins(0, 4, 0, 4)
-        self._layout.setSpacing(8)
+        self._layout.setContentsMargins(12, 8, 12, 0)
+        self._layout.setSpacing(2)
         self._layout.addStretch(1)
 
         self.setWidget(self._container)
         self._items: Dict[int, TaskItem] = {}
-        # Static completed-section label (hidden when nothing is completed).
-        # Managed by _relayout; never a task row, never persisted.
-        self._section_label = QLabel(self._container)
-        self._section_label.setObjectName("completedSectionLabel")
-        self._section_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # The scroll container itself is never interactive.
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # Completed-group header button (hidden when nothing is completed).
+        # Collapse is presentation-only and session-scoped: hiding rows never
+        # touches records, order, or statistics. Managed by _relayout.
+        self._section_label = QPushButton(self._container)
+        self._section_label.setObjectName("completedGroupHeader")
+        self._section_label.setAccessibleName("مجموعة المهام المكتملة")
+        self._section_label.setFixedHeight(32)
+        self._section_label.clicked.connect(self._on_group_header_clicked)
         self._section_label.setVisible(False)
+        self._completed_expanded = True
+        # Empty/all-done states (v3 §7.1): one centered block, shown only
+        # when there is nothing to act on. Presentation only: no records,
+        # no signals, never focusable.
+        self._empty_block = QWidget(self._container)
+        self._empty_layout = QVBoxLayout(self._empty_block)
+        self._empty_layout.setContentsMargins(24, 24, 24, 24)
+        self._empty_layout.setSpacing(4)
+        self._empty_title = QLabel(self._empty_block)
+        self._empty_title.setObjectName("emptyStateTitle")
+        self._empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_title.setWordWrap(True)
+        self._empty_layout.addWidget(self._empty_title)
+        self._empty_body = QLabel(self._empty_block)
+        self._empty_body.setObjectName("emptyStateBody")
+        self._empty_body.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_body.setWordWrap(True)
+        self._empty_layout.addWidget(self._empty_body)
+        self._empty_block.setVisible(False)
         # Category choices forwarded to every TaskItem (empty until the
         # coordinator supplies the active list once per UI lifecycle).
         self._categories: List[Category] = []
         self._icon_provider: Optional[CategoryIconProvider] = None
+        # Window-level tab-chain anchors (v3 §11), registered once by the
+        # coordinator window: the chain runs before -> rows -> after, so it
+        # stays correct no matter how often rows change.
+        self._chain_before: Optional[QWidget] = None
+        self._chain_after: Optional[QWidget] = None
 
     def set_categories(
         self,
@@ -109,6 +140,7 @@ class TaskList(QScrollArea):
         item.delete_requested.connect(self.task_delete_requested.emit)
         item.priority_change_requested.connect(self.task_priority_change_requested.emit)
         item.category_change_requested.connect(self.task_category_change_requested.emit)
+        item.inline_edit_committed.connect(self.task_inline_edit_committed.emit)
         self._items[task.id] = item
 
     def refresh_task_order(self) -> None:
@@ -120,7 +152,7 @@ class TaskList(QScrollArea):
         self._relayout()
 
     def _relayout(self) -> None:
-        """Order rows (incomplete, section label, completed) before stretch.
+        """Order rows (incomplete, group header, completed) before stretch.
 
         All row widgets are detached first: re-inserting widgets that are
         already laid out would corrupt the trailing-stretch invariant and
@@ -130,10 +162,25 @@ class TaskList(QScrollArea):
         for item in ordered:
             self._layout.removeWidget(item)
         self._layout.removeWidget(self._section_label)
+        self._layout.removeWidget(self._empty_block)
         widgets = [item for item in ordered if not item._task.is_completed]
         completed = [item for item in ordered if item._task.is_completed]
+        show_empty = not ordered
+        show_all_done = bool(ordered) and not widgets
+        if show_empty:
+            self._empty_title.setText("يومك فارغ")
+            self._empty_body.setText("ابدأ بمهمة واحدة، ثم اضغط Enter لإضافة التالية.")
+            widgets.append(self._empty_block)
+        elif show_all_done:
+            self._empty_title.setText("أنجزت كل مهام اليوم")
+            self._empty_body.setText("أضف مهمة جديدة أو استمتع بالراحة.")
+            widgets.append(self._empty_block)
+        self._empty_block.setVisible(show_empty or show_all_done)
         if completed:
             self._section_label.setText(f"مكتملة • {len(completed)}")
+            self._section_label.setIcon(
+                vector_icon("caret_down" if self._completed_expanded else "caret_left", "#98A2B3")
+            )
             widgets.append(self._section_label)
         widgets.extend(completed)
         insert_at = max(0, self._layout.count() - 1)
@@ -141,6 +188,80 @@ class TaskList(QScrollArea):
             self._layout.insertWidget(insert_at, widget)
             insert_at += 1
         self._section_label.setVisible(bool(completed))
+        for item in completed:
+            item.setVisible(self._completed_expanded)
+        self._rechain_tab_order()
+
+    def is_completed_expanded(self) -> bool:
+        """Current session-only collapse state of the completed group."""
+        return self._completed_expanded
+
+    def _focus_sequence(self) -> List[QWidget]:
+        """Focusable widgets in visual order: incomplete rows (checkbox,
+        title, delete), the group header when completed rows exist, then
+        completed rows. Hidden rows are skipped by Qt traversal itself."""
+        ordered = sorted(self._items.values(), key=lambda item: _view_order_key(item._task))
+        sequence: List[QWidget] = []
+        for item in ordered:
+            if not item._task.is_completed:
+                sequence.extend([item._checkbox, item._text_label, item._delete_btn])
+        if any(item._task.is_completed for item in ordered):
+            sequence.append(self._section_label)
+        for item in ordered:
+            if item._task.is_completed:
+                sequence.extend([item._checkbox, item._text_label, item._delete_btn])
+        return sequence
+
+    def _rechain_tab_order(self) -> None:
+        """Explicit keyboard chain through the rows (v3 §11).
+
+        Full window chain: anchor-before, row widgets, anchor-after.
+        Pointer-only operation per relayout: no timers, no signals.
+        """
+        sequence = self._focus_sequence()
+        if self._chain_before is not None and sequence:
+            sequence = [self._chain_before] + sequence
+        if self._chain_after is not None and sequence:
+            sequence = sequence + [self._chain_after]
+        if not sequence and self._chain_before is not None and self._chain_after is not None:
+            sequence = [self._chain_before, self._chain_after]
+        previous: Optional[QWidget] = None
+        for widget in sequence:
+            if previous is not None:
+                QWidget.setTabOrder(previous, widget)
+            previous = widget
+
+    def set_chain_anchors(
+        self, before: Optional[QWidget], after: Optional[QWidget]
+    ) -> None:
+        """Register window-level widgets surrounding the row chain.
+
+        Called once by the owning window; every relayout re-links through
+        them so the chain never goes stale as rows change.
+        """
+        self._chain_before = before
+        self._chain_after = after
+        self._rechain_tab_order()
+
+    def tab_chain_ends(self) -> tuple:
+        """``(first, last)`` focusable row widgets, or ``(None, None)``.
+
+        Introspection helper (tests / diagnostics); the window-level links
+        are maintained through :meth:`set_chain_anchors` instead.
+        """
+        sequence = self._focus_sequence()
+        if not sequence:
+            return (None, None)
+        return (sequence[0], sequence[-1])
+
+    def set_completed_expanded(self, expanded: bool) -> None:
+        """Show or hide completed rows without touching any record or order."""
+        self._completed_expanded = bool(expanded)
+        self._relayout()
+
+    def _on_group_header_clicked(self) -> None:
+        """Toggle completed-row visibility (presentation only)."""
+        self.set_completed_expanded(not self._completed_expanded)
 
     def tasks_snapshot(self) -> List[Task]:
         """Carried tasks for statistics (no DB round trip)."""
@@ -164,6 +285,29 @@ class TaskList(QScrollArea):
         if item is not None:
             item.update_task_category(category_id)
 
+    def ensure_task_visible(self, task_id: int) -> None:
+        """Scroll the row into view once layout settles (no-op for unknown ids).
+
+        The scroll is deferred by a zero-delay single shot because row
+        geometry is only valid after the layout pass runs in the event loop;
+        scrolling synchronously here would use stale (0, 0) positions. The
+        timer is parented to the list so it dies with it (never polling,
+        never a recurring timer, never a dangling callback).
+        """
+        item = self._items.get(task_id)
+        if item is None:
+            return
+
+        def _scroll_now() -> None:
+            current = self._items.get(task_id)
+            if current is not None:
+                self.ensureWidgetVisible(current)
+
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.timeout.connect(_scroll_now)
+        timer.start(0)
+
     def remove_task(self, task_id: int) -> None:
         """Remove a TaskItem from the visual list."""
         item = self._items.pop(task_id, None)
@@ -180,6 +324,8 @@ class TaskList(QScrollArea):
         self._items.clear()
         self._layout.removeWidget(self._section_label)
         self._section_label.setVisible(False)
+        self._layout.removeWidget(self._empty_block)
+        self._empty_block.setVisible(False)
 
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         """Show list context menu: dashboard, history, settings, clear completed."""

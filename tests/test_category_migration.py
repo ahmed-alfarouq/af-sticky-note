@@ -24,6 +24,20 @@ EXPECTED_SEEDS = [
     ("general", "عام", "general", 40),
 ]
 
+#: Post-006 expectation (Phase 0G amendment 01): the four new categories are
+#: inserted and the order becomes general, work, personal, study, health,
+#: home, religion, life. Only sort_order changes on pre-existing rows.
+EXPECTED_SEEDS_006 = [
+    ("general", "عام", "general", 10),
+    ("work", "عمل", "work", 20),
+    ("personal", "شخصي", "personal", 30),
+    ("study", "دراسة", "study", 40),
+    ("health", "صحة", "health", 50),
+    ("home", "المنزل", "home", 60),
+    ("religion", "دين", "religion", 70),
+    ("life", "حياة", "life", 80),
+]
+
 
 def _use(monkeypatch, directory):
     monkeypatch.setattr(migrations, "MIGRATIONS_DIR", directory)
@@ -94,13 +108,19 @@ def _upgrade(db_path):
 def test_fresh_database_seeds_categories_deterministically(db_connection):
     repo = CategoryRepository(db_connection)
     categories = repo.list_all()
-    assert [(c.id, c.name_ar, c.icon_key, c.sort_order) for c in categories] == EXPECTED_SEEDS
+    assert [(c.id, c.name_ar, c.icon_key, c.sort_order) for c in categories] == EXPECTED_SEEDS_006
     assert all(c.is_active for c in categories)
     assert all(c.created_at and c.updated_at for c in categories)
-    # Deterministic: identical timestamps for every seed row.
-    assert len({(c.created_at, c.updated_at) for c in categories}) == 1
+    # Deterministic: 005 rows re-stamped by 006 share one pair, untouched
+    # rows keep the 005 pair, and 006 inserts share another. Only
+    # sort_order/updated_at ever change on pre-existing rows.
+    assert {(c.created_at, c.updated_at) for c in categories} == {
+        ("2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+        ("2026-01-01T00:00:00+00:00", "2026-10-14T00:00:00+00:00"),
+        ("2026-10-14T00:00:00+00:00", "2026-10-14T00:00:00+00:00"),
+    }
     versions = sorted(row[0] for row in db_connection.execute("SELECT version FROM schema_migrations"))
-    assert versions == [1, 2, 3, 4, 5]
+    assert versions == [1, 2, 3, 4, 5, 6]
 
 
 def test_fresh_database_tasks_table_has_category_index(db_connection):
@@ -124,7 +144,7 @@ def test_upgrade_from_each_version_assigns_default_category(tmp_path, monkeypatc
     conn = _upgrade(db_path)
 
     versions_after = sorted(row[0] for row in conn.execute("SELECT version FROM schema_migrations"))
-    assert versions_after == [1, 2, 3, 4, 5]
+    assert versions_after == [1, 2, 3, 4, 5, 6]
 
     rows = conn.execute("SELECT id, text, is_completed, position, category_id FROM tasks ORDER BY id").fetchall()
     by_id = {r[0]: (r[1], r[2], r[3], r[4]) for r in rows}
@@ -164,15 +184,61 @@ def test_upgrade_preserves_rollover_lineage(tmp_path, monkeypatch):
     conn.close()
 
 
-def test_upgrade_is_idempotent_and_seeds_stay_at_four_rows(tmp_path, monkeypatch):
+def test_upgrade_is_idempotent_and_seeds_stay_at_eight_rows(tmp_path, monkeypatch):
     db_path = _build_versioned_db(tmp_path, monkeypatch, {1, 2}, "v12idem")
     conn = _upgrade(db_path)
     apply_migrations(conn)
     apply_migrations(conn)
     count = conn.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
-    assert count == 4
-    assert sorted(row[0] for row in conn.execute("SELECT version FROM schema_migrations")) == [1, 2, 3, 4, 5]
+    assert count == 8
+    assert sorted(row[0] for row in conn.execute("SELECT version FROM schema_migrations")) == [1, 2, 3, 4, 5, 6]
     conn.close()
+
+
+# ------------------------------------------------------------ upgrade v5 -> v6 (eight categories)
+
+def test_upgrade_v5_to_v6_preserves_tasks_and_history(tmp_path, monkeypatch):
+    """A v5 production database gains the four new categories; existing ids,
+    Arabic names, active flags, task rows, and rollover lineage are byte
+    identical afterwards, and the order matches the approved amendment."""
+    db_path = _build_versioned_db(tmp_path, monkeypatch, {1, 2, 3, 4, 5}, "v12345to6")
+    frozen = sqlite3.connect(str(db_path))
+    frozen.row_factory = sqlite3.Row
+    tasks_before = [
+        tuple(r) for r in frozen.execute(
+            "SELECT id, day_id, text, is_completed, position, priority, "
+            "source_task_id, category_id, created_at, updated_at FROM tasks ORDER BY id"
+        )
+    ]
+    cats_before = {
+        r["id"]: (r["name_ar"], r["icon_key"], r["is_active"], r["created_at"])
+        for r in frozen.execute("SELECT * FROM categories")
+    }
+    frozen.close()
+
+    _use(monkeypatch, REAL_DIR)
+    conn = _upgrade(db_path)
+    try:
+        assert sorted(row[0] for row in conn.execute("SELECT version FROM schema_migrations")) == [1, 2, 3, 4, 5, 6]
+        categories = CategoryRepository(conn).list_all()
+        assert [(c.id, c.name_ar, c.icon_key, c.sort_order) for c in categories] == EXPECTED_SEEDS_006
+        assert all(c.is_active for c in categories)
+        for old_id, (name, icon, active, created) in cats_before.items():
+            current = CategoryRepository(conn).get_by_id(old_id)
+            assert current is not None
+            assert (current.name_ar, current.icon_key, int(current.is_active), current.created_at) == (
+                name, icon, active, created,
+            )
+        tasks_after = [
+            tuple(r) for r in conn.execute(
+                "SELECT id, day_id, text, is_completed, position, priority, "
+                "source_task_id, category_id, created_at, updated_at FROM tasks ORDER BY id"
+            )
+        ]
+        assert tasks_after == tasks_before
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    finally:
+        conn.close()
 
 
 # ------------------------------------------------------------ integrity rules
@@ -219,8 +285,12 @@ def test_referenced_category_cannot_be_deleted(db_connection):
 def test_deactivating_category_keeps_tasks_valid(db_connection):
     repo = CategoryRepository(db_connection)
     repo.set_active("general", False)
-    assert [c.id for c in repo.list_active()] == ["religion", "work", "life"]
-    assert [c.id for c in repo.list_all()] == ["religion", "work", "life", "general"]
+    assert [c.id for c in repo.list_active()] == [
+        "work", "personal", "study", "health", "home", "religion", "life",
+    ]
+    assert [c.id for c in repo.list_all()] == [
+        "general", "work", "personal", "study", "health", "home", "religion", "life",
+    ]
 
     task_repo = TaskRepository(db_connection)
     day_id = db_connection.execute(

@@ -138,17 +138,38 @@ def test_creating_with_default_selector_persists_general(db_connection):
     window.close()
 
 
-def test_successful_submission_resets_category_to_default(db_connection):
+def test_creating_a_task_with_each_category_persists_stable_id(db_connection):
+    """Every one of the eight active categories round-trips its stable id."""
+    _, service, _, _, day_repo = _wiring(db_connection)
+    day = day_repo.create("2026-09-27")
+    expected = [
+        "general", "work", "personal", "study", "health", "home", "religion", "life",
+    ]
+    for category_id in expected:
+        task = service.create_task(day.id, f"مهمة {category_id}", category_id=category_id)
+        assert task is not None
+        assert task.category_id == category_id
+    assert [t.category_id for t in service.get_today_tasks(day.id)] == expected
+
+
+def test_successful_submission_keeps_category_and_resets_priority(db_connection):
+    """v3 §8.1: after adding, the category is kept for batch entry while the
+    priority selector returns to neutral."""
     if _skip_without_qt():
         return
     _qt_app()
+    from app.core.models import TaskPriority
+
     _, service, category_service, provider, day_repo = _wiring(db_connection)
     day = day_repo.create("2026-09-27")
     window = _make_window(service, category_service, provider, day)
 
     window._category_selector.set_category("life")
+    window._priority_selector.set_priority(TaskPriority.HIGH)
     window._on_task_submitted("مهمة")
-    assert window._category_selector.selected_category_id() == "general"
+    assert service.get_today_tasks(day.id)[0].category_id == "life"
+    assert window._category_selector.selected_category_id() == "life"
+    assert window._priority_selector.selected_priority() == TaskPriority.MEDIUM
     window.close()
 
 
@@ -351,7 +372,9 @@ def test_context_menu_shows_category_submenu_with_current_checked(db_connection)
     menu = _trigger_context_menu(item)
     submenu = _category_submenu(menu)
     assert submenu is not None
-    assert [a.text() for a in submenu.actions()] == ["دين", "عمل", "حياة", "عام"]
+    assert [a.text() for a in submenu.actions()] == [
+        "عام", "عمل", "شخصي", "دراسة", "صحة", "المنزل", "دين", "حياة",
+    ]
     assert [a.text() for a in submenu.actions() if a.isChecked()] == ["عمل"]
     item.close()
 
@@ -394,4 +417,32 @@ def test_context_menu_category_change_updates_in_place(db_connection):
     assert stored.priority == task.priority
     assert stored.source_task_id == task.source_task_id
     assert window._task_list._items[task.id].category_id == "work"
+    window.close()
+
+
+def test_context_menu_change_to_new_category_preserves_all_fields(db_connection):
+    """Menu-driven change to a Phase-0G category keeps every other field."""
+    task_repo, service, category_service, provider, day_repo = _wiring(db_connection)
+    day = day_repo.create("2026-09-27")
+    from app.core.models import TaskPriority
+
+    task = service.create_task(day.id, "مهمة", priority=TaskPriority.HIGH, category_id="general")
+    assert task is not None
+    window = _make_window(service, category_service, provider, day)
+    window._task_list.set_tasks(service.get_today_tasks(day.id))
+
+    window._on_task_category_change_requested(task.id, "personal")
+
+    stored = task_repo.get_by_id(task.id)
+    assert stored is not None
+    assert stored.category_id == "personal"
+    assert stored.id == task.id
+    assert stored.day_id == task.day_id
+    assert stored.text == task.text
+    assert stored.is_completed == task.is_completed
+    assert stored.position == task.position
+    assert stored.priority == task.priority
+    assert stored.source_task_id == task.source_task_id
+    assert stored.created_at == task.created_at
+    assert window._task_list._items[task.id].category_id == "personal"
     window.close()

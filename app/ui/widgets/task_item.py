@@ -4,13 +4,16 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import List, Optional, Sequence
 
-from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QAction, QActionGroup, QContextMenuEvent, QIcon, QPixmap
+from PySide6.QtCore import QEvent, QPropertyAnimation, QSize, Qt, Signal
+from PySide6.QtGui import QAction, QActionGroup, QColor, QContextMenuEvent, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
+    QGraphicsDropShadowEffect,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMenu,
     QSizePolicy,
     QWidget,
@@ -20,12 +23,20 @@ from app.core.models import Category, Task, TaskPriority
 from app.ui.category_icons import CategoryIconProvider
 from app.ui.category_presentation import category_icon_key, category_label, sort_categories
 from app.ui.priority_presentation import PRIORITY_LABELS, PRIORITY_ORDER
+from app.ui.widgets.icon_button import IconButton
 
 #: Fixed metadata geometry (Phase 7C). The two indicators share one small
 #: footprint so rows never jump between priorities or categories.
 CATEGORY_ICON_BOX = 22
 CATEGORY_ICON_PIXMAP = 18
 PRIORITY_DOT_BOX = 12
+
+#: Checkbox press animation (v3 §1.3/§7.3): the 16 px icon shrinks toward
+#: 88% and back over 150 ms. Only the icon paints smaller -- the 32x32 hit
+#: area, layout, and row geometry never change.
+PRESS_ANIMATION_MS = 150
+PRESS_ICON_SIZE = 16
+PRESSED_ICON_SIZE = 14
 
 #: Invisible break opportunity for display text (Phase 7C.1). QLabel wraps
 #: at whitespace only, so long unbreakable tokens (URLs, paths, repeated
@@ -36,7 +47,6 @@ PRIORITY_DOT_BOX = 12
 _ZERO_WIDTH_SPACE = "\u200b"
 _BREAK_AFTER_CHARS = frozenset("/?\\-_.,;:?&=%#+~")
 _MAX_UNBROKEN_RUN = 20
-
 
 def to_display_text(raw_text: str) -> str:
     """Add invisible wrap opportunities to overlong/unbreakable runs.
@@ -70,6 +80,22 @@ def from_display_text(display_text: str) -> str:
     return display_text.replace(_ZERO_WIDTH_SPACE, "")
 
 
+class _TaskTextLabel(QLabel):
+    """Task-text label that may always shrink to fit its row.
+
+    QLabel's default minimumSizeHint is the widest unwrappable word, so one
+    long token would force the whole TaskList past narrow viewports even
+    though the list forbids horizontal scrolling by design (the overflow is
+    then clipped and unreachable, potentially hiding row controls). Wrapping
+    owns legibility, so the width floor stays compressible while height
+    still comes from heightForWidth during layout.
+    """
+
+    def minimumSizeHint(self) -> QSize:
+        hint = super().minimumSizeHint()
+        return QSize(0, hint.height())
+
+
 class TaskItem(QFrame):
     """A single task row containing a checkbox, task text label, and context menu."""
 
@@ -78,6 +104,7 @@ class TaskItem(QFrame):
     delete_requested = Signal(int)         # task_id
     priority_change_requested = Signal(int, object)  # task_id, TaskPriority
     category_change_requested = Signal(int, str)  # task_id, category_id
+    inline_edit_committed = Signal(int, str)  # task_id, trimmed new text
 
     def __init__(
         self,
@@ -92,6 +119,11 @@ class TaskItem(QFrame):
         self._task = task
         self._categories: List[Category] = list(categories)
         self._icon_provider = icon_provider
+        # Interaction state before any widget (event filters installed during
+        # _init_ui may fire synchronously, e.g. via style polish).
+        self._edit_field: Optional[QLineEdit] = None
+        self._hovered = False
+        self._press_animation: Optional[QPropertyAnimation] = None
         self._init_ui(task)
 
     def _init_ui(self, task: Task) -> None:
@@ -105,7 +137,12 @@ class TaskItem(QFrame):
 
         self._checkbox = QCheckBox(self)
         self._checkbox.setChecked(task.is_completed)
-        self._checkbox.setAccessibleName(f"تحديد إنجاز المهمة: {task.text}")
+        self._checkbox.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self._checkbox.setAccessibleName(task.text)
+        # Fixed 32x32 hit area (v3 §7.2): the icon is centered inside it and
+        # never participates in layout, so rows keep stable geometry while
+        # the press animation and focus ring play inside the same box.
+        self._checkbox.setFixedSize(32, 32)
         # Completion art (Issue 7): the native indicator box is collapsed
         # to zero by QSS, and the real 16px right-icon asset is shown as
         # the button icon instead -- checked state via QIcon On/Off modes,
@@ -127,7 +164,7 @@ class TaskItem(QFrame):
             self._checkbox.setIconSize(QSize(16, 16))
         self._checkbox.toggled.connect(self._on_toggled)
 
-        self._text_label = QLabel(to_display_text(task.text), self)
+        self._text_label = _TaskTextLabel(to_display_text(task.text), self)
         self._text_label.setWordWrap(True)
         # Explicit API mirror of the QSS qproperty-alignment rule: QLabel
         # text anchoring is an alignment property, not a layout-direction
@@ -135,6 +172,10 @@ class TaskItem(QFrame):
         self._text_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._text_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._text_label.setToolTip(task.text)
+        # The title is a tab stop (v3 §11): Enter/F2 or double-click starts
+        # inline editing, handled through the event filter below.
+        self._text_label.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self._text_label.installEventFilter(self)
         self._update_label_style(task.is_completed)
 
         self.setAccessibleName(f"مهمة: {task.text}")
@@ -157,8 +198,32 @@ class TaskItem(QFrame):
         self._priority_dot.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         layout.addWidget(self._priority_dot)
 
+        # Hover-revealed delete control (v3 §7.6): icon-only trash button,
+        # invisible (opacity 0, space reserved) until the row is hovered or
+        # holds keyboard focus. Clicking deletes via the existing service
+        # path; it never toggles completion or starts an edit.
+        self._delete_btn = IconButton(
+            "trash", parent=self, button_size=32, size=18,
+        )
+        self._delete_btn.setObjectName("rowDeleteButton")
+        self._delete_btn.setAccessibleName("حذف المهمة")
+        self._delete_btn.setToolTip("حذف المهمة")
+        self._delete_btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self._delete_opacity = QGraphicsOpacityEffect(self._delete_btn)
+        self._delete_opacity.setOpacity(0.0)
+        self._delete_btn.setGraphicsEffect(self._delete_opacity)
+        self._delete_btn.clicked.connect(self._on_delete_clicked)
+        layout.addWidget(self._delete_btn)
+
+        # Inline-edit state (v3 §7.4): at most one transient field per row.
+        # (_edit_field/_hovered are initialized in __init__.)
+        for child in (self._checkbox, self._text_label, self._category_icon,
+                      self._priority_dot, self._delete_btn):
+            child.installEventFilter(self)
+
         self._refresh_category_icon()
         self._refresh_priority_dot()
+        self._update_delete_visibility()
 
     @property
     def priority(self) -> TaskPriority:
@@ -227,12 +292,12 @@ class TaskItem(QFrame):
         )
 
     def _refresh_priority_dot(self) -> None:
-        """Show the compact priority indicator (dot, never text in the row).
+        """Show the compact priority indicator (approved R-rows-c mapping).
 
-        Levels differ by fill *and* treatment, not hue alone: HIGH is a
-        solid amber dot, MEDIUM a translucent blue dot, LOW a hollow dim
-        ring. Completed rows mute every level to the quiet gray. The fixed
-        box keeps row height identical across levels.
+        HIGH is a solid amber-red dot, LOW a hollow amber ring, MEDIUM
+        paints nothing (its fixed box is kept so rows never shift). Labels,
+        tooltips, and accessible names keep the truthful stored level;
+        completed rows mute every level to the quiet gray.
         """
         if self._task.priority == TaskPriority.HIGH:
             self._priority_dot.setObjectName("priorityDotHigh")
@@ -263,7 +328,29 @@ class TaskItem(QFrame):
         self._refresh_priority_dot()
         status_text = "مكتملة" if checked else "غير مكتملة"
         self.setAccessibleDescription(f"الحالة: {status_text}")
+        self._play_press_animation()
         self.completed_toggled.emit(self.task_id, checked)
+
+    def _play_press_animation(self) -> None:
+        """Shrink the checkbox icon toward 88% and restore it (v3 §7.3).
+
+        One bounded 150 ms run per press; an in-flight run restarts from the
+        current size so rapid clicks never stick mid-scale. Parented to the
+        row (dies with it); layout and hit area are untouched.
+        """
+        previous = self._press_animation
+        if previous is not None:
+            previous.stop()
+        animation = QPropertyAnimation(self._checkbox, b"iconSize", self)
+        animation.setDuration(PRESS_ANIMATION_MS)
+        animation.setStartValue(self._checkbox.iconSize())
+        animation.setEndValue(QSize(PRESSED_ICON_SIZE, PRESSED_ICON_SIZE))
+        animation.finished.connect(self._restore_press_icon)
+        self._press_animation = animation
+        animation.start()
+
+    def _restore_press_icon(self) -> None:
+        self._checkbox.setIconSize(QSize(PRESS_ICON_SIZE, PRESS_ICON_SIZE))
 
     def _update_label_style(self, is_completed: bool) -> None:
         if is_completed:
@@ -285,16 +372,134 @@ class TaskItem(QFrame):
 
     def update_task_text(self, new_text: str) -> None:
         """Update visible task text."""
+        self._cancel_inline_edit()
         self._text_label.setText(to_display_text(new_text))
         self._text_label.setToolTip(new_text)
         # Keep the carried Task in step so a later priority update cannot
         # resurrect the old text.
         self._task = replace(self._task, text=new_text)
         self.setAccessibleName(f"مهمة: {new_text}")
+        self._checkbox.setAccessibleName(new_text)
+
+    # ------------------------------------------------------------------
+    # Inline title editing (v3 §7.4, title only)
+    # ------------------------------------------------------------------
+    def is_editing_inline(self) -> bool:
+        """Whether the transient edit field is currently open."""
+        return self._edit_field is not None
+
+    def eventFilter(self, watched: QWidget, event: QEvent) -> bool:
+        """Drive hover visibility, edit triggers, and edit-field keys."""
+        event_type = event.type()
+        if watched is self._text_label:
+            if event_type == QEvent.Type.MouseButtonDblClick:
+                self._start_inline_edit()
+                return True
+            if event_type == QEvent.Type.KeyPress:
+                key = event.key()
+                if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_F2):
+                    self._start_inline_edit()
+                    return True
+        if watched is self._edit_field and event_type == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Escape:
+                self._cancel_inline_edit()
+                return True
+        if event_type == QEvent.Type.Enter:
+            self._hovered = True
+            self._update_delete_visibility()
+        elif event_type == QEvent.Type.Leave:
+            self._hovered = False
+            self._update_delete_visibility()
+        elif event_type in (QEvent.Type.FocusIn, QEvent.Type.FocusOut):
+            self._update_delete_visibility()
+        return super().eventFilter(watched, event)
+
+    def _start_inline_edit(self) -> None:
+        """Swap the title label for an edit field with the text selected."""
+        if self._edit_field is not None or self.task_id is None:
+            return
+        field = QLineEdit(self)
+        field.setObjectName("taskTitleEdit")
+        field.setText(self._task.text)
+        field.setMaxLength(200)
+        field.setFixedHeight(26)
+        field.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        glow = QGraphicsDropShadowEffect(field)
+        glow.setColor(QColor(79, 124, 172, 64))
+        glow.setBlurRadius(6)
+        glow.setOffset(0, 0)
+        field.setGraphicsEffect(glow)
+        field.selectAll()
+        field.editingFinished.connect(self._commit_inline_edit)
+        field.installEventFilter(self)
+        layout = self.layout()
+        assert layout is not None
+        index = layout.indexOf(self._text_label)
+        layout.removeWidget(self._text_label)
+        layout.insertWidget(index, field, 1)
+        self._text_label.hide()
+        self._edit_field = field
+        field.setFocus()
+
+    def _commit_inline_edit(self) -> None:
+        """Persist a non-empty, changed edit; otherwise cancel silently."""
+        field = self._edit_field
+        if field is None or self.task_id is None:
+            return
+        cleaned = field.text().strip()
+        task_id = self.task_id
+        self._finish_inline_edit()
+        if not cleaned or cleaned == self._task.text:
+            self._text_label.setFocus()
+            return
+        self.inline_edit_committed.emit(task_id, cleaned)
+        self._text_label.setFocus()
+
+    def _cancel_inline_edit(self) -> None:
+        """Close the edit field, restoring focus to the title."""
+        if self._edit_field is None:
+            return
+        self._finish_inline_edit()
+        self._text_label.setFocus()
+
+    def _finish_inline_edit(self) -> None:
+        field = self._edit_field
+        self._edit_field = None
+        if field is not None:
+            field.removeEventFilter(self)
+            layout = self.layout()
+            if layout is not None:
+                index = layout.indexOf(field)
+                layout.removeWidget(field)
+                layout.insertWidget(max(0, index), self._text_label, 1)
+            field.deleteLater()
+        self._text_label.show()
+
+    # ------------------------------------------------------------------
+    # Hover-revealed delete (v3 §7.6)
+    # ------------------------------------------------------------------
+    def _focus_within(self) -> bool:
+        """Whether the row or any of its focusable children holds focus."""
+        widgets = [self, self._checkbox, self._text_label, self._delete_btn]
+        if self._edit_field is not None:
+            widgets.append(self._edit_field)
+        return any(widget.hasFocus() for widget in widgets)
+
+    def _update_delete_visibility(self) -> None:
+        """Show the delete control on hover/focus-within, hide otherwise.
+
+        Local opacity switch only: no relayout, no signals, no writes.
+        """
+        self._delete_opacity.setOpacity(1.0 if (self._hovered or self._focus_within()) else 0.0)
+
+    def _on_delete_clicked(self) -> None:
+        if self.task_id is not None:
+            self.delete_requested.emit(self.task_id)
 
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         """Show context menu for editing, changing category/priority, or deleting."""
         menu = QMenu(self)
+        menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
 
         edit_action = QAction("تعديل المهمة", menu)
         edit_action.triggered.connect(lambda: self.edit_requested.emit(self.task_id))
@@ -306,6 +511,7 @@ class TaskItem(QFrame):
         visible_categories = [c for c in sort_categories(self._categories) if c.is_active]
         if visible_categories:
             category_menu = QMenu("الفئة", menu)
+            category_menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
             category_group = QActionGroup(menu)
             category_group.setExclusive(True)
 
@@ -328,6 +534,7 @@ class TaskItem(QFrame):
 
         # Priority submenu: checkable actions, current priority checked.
         priority_menu = QMenu("الأولوية", menu)
+        priority_menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         priority_group = QActionGroup(menu)
         priority_group.setExclusive(True)
 

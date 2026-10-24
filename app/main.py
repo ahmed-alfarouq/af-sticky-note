@@ -15,7 +15,14 @@ Wires together the real application flow for Phase 4A:
 from __future__ import annotations
 
 import logging
+import os
 import sys
+
+# Qt binding selection (v3 §1.4): must precede any import that initializes
+# QtAwesome or qtpy so the binding is never guessed. Set here (the earliest
+# application module on every startup path) and mirrored defensively in
+# app/ui/icons.py for direct imports.
+os.environ.setdefault("QT_API", "pyside6")
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QMessageBox
@@ -117,6 +124,18 @@ def bootstrap_application(app: QApplication) -> MainWindow:
         window._allow_window_close = True
         app.quit()
 
+    # Rollover service is created before the window so the manual
+    # carry-forward menu action can close over it; the midnight coordinator
+    # reuses the same instance below. Yesterday -> today only: multi-day
+    # catch-up stays with the coordinator, and repeats are idempotent.
+    rollover_service = DailyRolloverService(conn=conn, day_repo=day_repo, task_repo=task_repo)
+
+    def _on_carry_forward_requested() -> int:
+        from datetime import date, timedelta
+
+        yesterday = (date.fromisoformat(today_str) - timedelta(days=1)).isoformat()
+        return len(rollover_service.rollover_tasks(yesterday, today_str))
+
     window = MainWindow(
         day=day,
         quote_text=quote_text,
@@ -128,6 +147,8 @@ def bootstrap_application(app: QApplication) -> MainWindow:
         category_service=category_service,
         icon_provider=CategoryIconProvider(),
         report_service=report_service,
+        window_controller=platform_adapter.window_controller,
+        on_carry_forward_requested=_on_carry_forward_requested,
     )
 
     # 5. Initialize system tray if on Windows adapter and attach to desktop layer if supported
@@ -148,7 +169,7 @@ def bootstrap_application(app: QApplication) -> MainWindow:
     window.raise_()
     window.activateWindow()
 
-    if platform_adapter.is_supported:
+    if platform_adapter.is_supported and window.is_pinned():
         try:
             hwnd = int(window.winId())
             attached = platform_adapter.window_controller.attach_to_desktop(hwnd)
@@ -157,7 +178,7 @@ def bootstrap_application(app: QApplication) -> MainWindow:
             logger.warning("Failed to attach to desktop layer: %s", exc)
 
     # 6. Wire runtime daily lifecycle coordinator (midnight rollover timer & resume listener)
-    rollover_service = DailyRolloverService(conn=conn, day_repo=day_repo, task_repo=task_repo)
+    # Reuses the rollover_service created above for the carry-forward action.
     coordinator = DailyLifecycleCoordinator(
         current_date=today_str,
         rollover_service=rollover_service,

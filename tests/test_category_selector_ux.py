@@ -44,9 +44,11 @@ def test_selector_shows_icon_plus_name_in_sort_order(db_connection):
     from app.ui.widgets.category_selector import CategorySelector
 
     selector = CategorySelector(_categories(db_connection), _provider())
-    assert selector.category_ids() == ["religion", "work", "life", "general"]
+    assert selector.category_ids() == [
+        "general", "work", "personal", "study", "health", "home", "religion", "life",
+    ]
     assert [selector.itemText(i) for i in range(selector.count())] == [
-        "دين", "عمل", "حياة", "عام",
+        "عام", "عمل", "شخصي", "دراسة", "صحة", "المنزل", "دين", "حياة",
     ]
     for i in range(selector.count()):
         assert not selector.itemIcon(i).isNull()
@@ -95,7 +97,9 @@ def test_selector_without_provider_shows_names_only(db_connection):
     from app.ui.widgets.category_selector import CategorySelector
 
     selector = CategorySelector(_categories(db_connection))
-    assert selector.category_ids() == ["religion", "work", "life", "general"]
+    assert selector.category_ids() == [
+        "general", "work", "personal", "study", "health", "home", "religion", "life",
+    ]
     assert selector.itemIcon(0).isNull()
     assert selector.selected_category_id() == "general"
 

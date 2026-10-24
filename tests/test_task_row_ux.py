@@ -122,8 +122,13 @@ def test_row_shows_every_category_icon_with_name_tooltip(db_connection):
     _qt_app()
     _, _, provider, _, _ = _wiring(db_connection)
     categories = _categories(db_connection)
-    assert [c.id for c in categories] == ["religion", "work", "life", "general"]
-    expected_names = {"religion": "دين", "work": "عمل", "life": "حياة", "general": "عام"}
+    assert [c.id for c in categories] == [
+        "general", "work", "personal", "study", "health", "home", "religion", "life",
+    ]
+    expected_names = {
+        "general": "عام", "work": "عمل", "personal": "شخصي", "study": "دراسة",
+        "health": "صحة", "home": "المنزل", "religion": "دين", "life": "حياة",
+    }
     for category in categories:
         item = _make_item(_make_task(category_id=category.id), categories, provider)
         assert not item._category_icon.pixmap().isNull()
@@ -147,6 +152,78 @@ def test_row_dot_level_and_tooltip_per_priority():
         assert item._priority_dot.objectName() == name
         assert arabic in item._priority_dot.toolTip()
         item.close()
+
+
+def _pixel_close(pixel, rgb, tolerance=48):
+    from PySide6.QtGui import qRed, qGreen, qBlue
+
+    return (abs(qRed(pixel) - rgb[0]) <= tolerance
+            and abs(qGreen(pixel) - rgb[1]) <= tolerance
+            and abs(qBlue(pixel) - rgb[2]) <= tolerance)
+
+
+def _pixel_amber_hue(pixel):
+    """Amber hue family (antialiased edges darken but keep r > g > b)."""
+    from PySide6.QtGui import qRed, qGreen, qBlue
+
+    return qRed(pixel) > qGreen(pixel) > qBlue(pixel)
+
+
+def _pixel_transparent(pixel):
+    from PySide6.QtGui import qAlpha
+
+    return qAlpha(pixel) < 64
+
+
+def _dot_image(priority):
+    from PySide6.QtWidgets import QApplication
+
+    from app.ui.styles.app_style import get_application_stylesheet
+
+    app = QApplication.instance()
+    app.setStyleSheet(get_application_stylesheet())
+    item = _make_item(_make_task(priority=priority))
+    item.resize(340, 80)
+    item.show()
+    QApplication.instance().processEvents()
+    return item, item._priority_dot.grab().toImage()
+
+
+def test_priority_dots_render_approved_treatments():
+    """R-rows-c: HIGH solid amber-red, LOW hollow amber ring, MEDIUM empty."""
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.core.models import TaskPriority
+
+    holders = []
+    try:
+        item, high = _dot_image(TaskPriority.HIGH)
+        holders.append(item)
+        center = high.pixel(6, 6)
+        assert not _pixel_transparent(center)
+        assert _pixel_close(center, (229, 115, 115)), hex(center)
+
+        item, low = _dot_image(TaskPriority.LOW)
+        holders.append(item)
+        assert _pixel_transparent(low.pixel(6, 6))
+        ring_pixels = [
+            low.pixel(x, y) for x in range(12) for y in range(12)
+            if not _pixel_transparent(low.pixel(x, y))
+        ]
+        assert ring_pixels, "hollow ring must paint some pixels"
+        assert all(_pixel_amber_hue(p) for p in ring_pixels)
+
+        item, medium = _dot_image(TaskPriority.MEDIUM)
+        holders.append(item)
+        assert all(
+            _pixel_transparent(medium.pixel(x, y))
+            for x in range(12) for y in range(12)
+        )
+    finally:
+        for holder in holders:
+            holder.close()
+        _qt_app().setStyleSheet("")
 
 
 def test_category_mutation_updates_icon_in_place(db_connection):
@@ -272,9 +349,8 @@ def test_input_dock_contains_all_controls(db_connection):
     assert window._task_input is not None
     assert window._add_btn is not None
     assert window._add_btn.text() == "+"
-    # Selector distinction: dock shows icon+name / priority names.
-    assert window._category_selector.itemText(
-        window._category_selector.currentIndex()) == "عام"
+    # Chip shows the current category name.
+    assert window._category_selector.selected_label() == "عام"
     window.close()
 
 
@@ -293,7 +369,7 @@ def test_add_button_submits_through_creation_path(db_connection):
     tasks = service.get_today_tasks(day.id)
     assert len(tasks) == 1
     assert (tasks[0].text, tasks[0].category_id) == ("مهمة الزر", "life")
-    assert window._category_selector.selected_category_id() == "general"
+    assert window._category_selector.selected_category_id() == "life"
     window.close()
 
 
@@ -436,3 +512,72 @@ def test_unbreakable_token_in_window_has_no_horizontal_scroll(db_connection):
             assert item._priority_dot.isVisible()
             assert item._checkbox.isVisible()
     window.close()
+
+
+def test_row_and_list_geometry_matches_spec(db_connection):
+    """v3 §7 geometry: row padding/spacing, control boxes, list rhythm,
+    group-header height. Visual penalties (shadows, exact pixels) stay
+    manual-verification items."""
+    if _skip_without_qt():
+        return
+    _qt_app()
+    _, _, provider, _, _ = _wiring(db_connection)
+    item = _make_item(_make_task(), _categories(db_connection), provider)
+    try:
+        item.resize(340, 80)
+        item.show()
+        QApplication.instance().processEvents()
+        margins = item.layout().getContentsMargins()
+        assert tuple(margins) == (12, 8, 12, 8)
+        assert item.layout().spacing() == 8
+        assert (item._checkbox.width(), item._checkbox.height()) == (32, 32)
+        assert (item._delete_btn.width(), item._delete_btn.height()) == (32, 32)
+        # Visual order right -> left ends at the delete control.
+        assert item._delete_btn.x() < item._priority_dot.x()
+        assert item._text_label.font().italic() is False
+    finally:
+        item.close()
+
+
+def test_title_type_rule_is_spec_size():
+    from pathlib import Path
+
+    sheet = (Path(__file__).resolve().parent.parent / "app" / "ui" / "styles" / "app_style.py").read_text(
+        encoding="utf-8"
+    )
+    for name in ("taskTextLabel", "taskTextLabelCompleted"):
+        chunks = sheet.split(f"QLabel#{name}")
+        block = next(c for c in chunks[1:] if "font-size" in c.split("}}")[0])
+        block = block.split("}}")[0]
+        assert "font-size: 16px" in block, name
+        assert "italic" not in block, name
+
+
+def test_list_rhythm_and_group_header_geometry(db_connection):
+    """v3 §7.1/§7.7: container margins, 2 px row rhythm, 32 px header."""
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.core.models import TaskPriority
+
+    service, category_service, provider, day_repo, _ = _wiring(db_connection)
+    day = day_repo.create("2026-09-27")
+    service.create_task(day.id, "U.U�U.Oc", priority=TaskPriority.HIGH)
+    done = service.create_task(day.id, "U.U+O�O�Oc")
+    assert done is not None
+    service.toggle_task_completion(done.id, True)
+    window = _make_window(service, category_service, provider, day)
+    window._task_list.set_tasks(service.get_today_tasks(day.id))
+    try:
+        window.resize(380, 560)
+        window.show()
+        QApplication.instance().processEvents()
+        task_list = window._task_list
+        margins = task_list._layout.getContentsMargins()
+        assert tuple(margins) == (12, 8, 12, 0)
+        assert task_list._layout.spacing() == 2
+        header = task_list._section_label
+        assert header.height() == 32
+        assert not header.icon().isNull()
+    finally:
+        window.close()

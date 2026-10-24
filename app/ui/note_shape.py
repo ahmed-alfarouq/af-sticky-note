@@ -44,13 +44,17 @@ import random
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
+from app.ui import theme
+
 # ---------------------------------------------------------------------------
 # Tuning constants (internal only -- never surfaced as user configuration)
 # ---------------------------------------------------------------------------
 
 #: Radius of the two top corners. Moderate on purpose: the note must stay
 #: recognisably the same sticky note as previous versions.
-DEFAULT_CORNER_RADIUS = 16.0
+#: Canonical value lives in app.ui.theme (v3 window radius); aliased here so
+#: the shell radius keeps one home. Both modules are Qt-free.
+DEFAULT_CORNER_RADIUS = theme.RADII["window"]
 
 #: Maximum depth of a bottom-edge tear, in logical pixels. Kept small so the
 #: organic edge is noticeable but never becomes the main visual element, and

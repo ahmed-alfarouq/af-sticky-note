@@ -12,7 +12,7 @@ from typing import Optional
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from app.infrastructure.clock import get_date_parts
+from app.infrastructure.clock import date_display, get_date_parts
 from app.ui.widgets.progress_ring import ProgressRing
 
 __all__ = ["DateHeaderWidget"]
@@ -31,7 +31,7 @@ class DateHeaderWidget(QFrame):
         self.setAccessibleName("ترويسة التاريخ وتقدم اليوم")
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setContentsMargins(24, 12, 24, 0)
         layout.setSpacing(10)
 
         self._day_number = QLabel(self)
@@ -74,15 +74,30 @@ class DateHeaderWidget(QFrame):
         self.set_date(date_text)
 
     def set_date(self, date_text: str) -> None:
-        """Load Gregorian/Hijri parts for an ISO date (never raises)."""
-        day_number, weekday_ar, month_year, hijri = get_date_parts(date_text)
-        self._day_number.setText(day_number)
-        self._weekday_label.setText(weekday_ar)
-        self._hijri_label.setText(hijri)
-        self._gregorian_label.setText(month_year)
-        secondary = f"{month_year}  •  {hijri}" if weekday_ar else month_year or hijri
+        """Load Gregorian/Hijri parts for an ISO date (never raises).
+
+        Follows the v3 hero hierarchy through the :class:`DateDisplay`
+        domain contract: the Hijri numeral dominates, Gregorian stays
+        secondary. Invalid input degrades to the raw string.
+        """
+        display = date_display(date_text)
+        if display is None:
+            day_number, weekday_ar, month_year, hijri = get_date_parts(date_text)
+            self._day_number.setText(day_number)
+            self._weekday_label.setText(weekday_ar)
+            self._hijri_label.setText("")
+            self._gregorian_label.setText(month_year or hijri)
+            secondary = month_year or hijri
+        else:
+            self._day_number.setText(str(display.hijri_day))
+            self._weekday_label.setText(display.weekday_ar)
+            hijri_month_year = f"{display.hijri_month_name} {display.hijri_year} هـ"
+            gregorian_month_year = f"{display.gregorian_month_name} {display.gregorian_year}"
+            self._hijri_label.setText(hijri_month_year)
+            self._gregorian_label.setText(gregorian_month_year)
+            secondary = f"{gregorian_month_year}  •  {display.hijri_day} {hijri_month_year}"
         self._secondary_label.setText(secondary)
-        self.setAccessibleDescription(f"تاريخ اليوم: {day_number} {secondary}")
+        self.setAccessibleDescription(f"تاريخ اليوم: {self._day_number.text()} {secondary}")
 
     def set_progress(self, completed: int, total: int) -> None:
         """Forward daily counts to the ring (repaint only on change)."""

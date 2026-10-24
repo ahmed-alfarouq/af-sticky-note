@@ -196,7 +196,9 @@ def test_dashboard_category_cards_order_icons_and_history(db_connection):
         dialog._end_edit.setDate(QDate(2026, 10, 11))
         dialog._apply_btn.click()
         cards = dialog.category_cards()
-        assert [c.category_id() for c in cards] == ["religion", "work", "life", "general"]
+        assert [c.category_id() for c in cards] == [
+            "general", "work", "personal", "study", "health", "home", "religion", "life",
+        ]
         by_id = {c.category_id(): c for c in cards}
         assert by_id["work"]._stats_label.text() == "مكتملة 1 من 2 • 50٪"
         # Inactive historical category stays visible with stored metadata.
@@ -486,7 +488,7 @@ def test_repeated_open_close_cycles_stay_clean(db_connection):
             dialog._end_edit.setDate(QDate(2026, 10, 11))
             dialog._apply_btn.click()
             assert dialog.load_count() == 2
-            assert len(dialog.category_cards()) == 4
+            assert len(dialog.category_cards()) == 8
         finally:
             dialog.close()
             dialog.deleteLater()

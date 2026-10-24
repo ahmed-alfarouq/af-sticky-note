@@ -144,8 +144,8 @@ def test_two_tasks_stack_from_top_without_gap():
         items = [listing._layout.itemAt(i).widget()
                  for i in range(listing._layout.count() - 1)]
         assert len(items) == 2
-        assert items[0].y() == 4  # container top margin: no gap above
-        assert items[1].y() == items[0].y() + items[0].height() + 8
+        assert items[0].y() == 8  # container top padding (v3 §7.1)
+        assert items[1].y() == items[0].y() + items[0].height() + 2
     finally:
         listing.close()
 
@@ -165,7 +165,7 @@ def test_toggle_delete_and_clear_reflow_without_gaps():
         listing.refresh_task_order()
         QApplication.instance().processEvents()
         first = listing._layout.itemAt(0).widget()
-        assert first.task_id == 2 and first.y() == 4
+        assert first.task_id == 2 and first.y() == 8
 
         listing._items[1].set_completed_silently(False)
         listing.refresh_task_order()
@@ -174,15 +174,61 @@ def test_toggle_delete_and_clear_reflow_without_gaps():
 
         listing.remove_task(2)
         QApplication.instance().processEvents()
-        assert listing._layout.itemAt(0).widget().y() == 4
+        assert listing._layout.itemAt(0).widget().y() == 8
         assert listing._layout.count() == 2  # row + stretch only
 
         listing.set_tasks([])
         QApplication.instance().processEvents()
-        assert listing._layout.count() == 1  # stretch only, no stale space
+        assert listing._layout.count() == 2  # empty-state block + stretch
         assert listing._section_label.isHidden()
+        assert not listing._empty_block.isHidden()
     finally:
         listing.close()
+
+
+def test_empty_and_all_done_states(db_connection):
+    """v3 §7.1: exact strings, placement, and transitions of both states."""
+    if _skip_without_qt():
+        return
+    _qt_app()
+    service, category_service, provider, day_repo = _wiring(db_connection)
+    day = day_repo.create("2026-09-27")
+    window = _make_window(service, category_service, provider, day)
+    task_list = window._task_list
+    try:
+        window.resize(380, 560)
+        window.show()
+        QApplication.instance().processEvents()
+
+        task_list.set_tasks([])
+        QApplication.instance().processEvents()
+        assert not task_list._empty_block.isHidden()
+        assert task_list._empty_title.text() == "يومك فارغ"
+        assert task_list._empty_body.text() == "ابدأ بمهمة واحدة، ثم اضغط Enter لإضافة التالية."
+        assert task_list._section_label.isHidden()
+
+        done = service.create_task(day.id, "منجزة")
+        assert done is not None
+        service.toggle_task_completion(done.id, True)
+        task_list.set_tasks(service.get_today_tasks(day.id))
+        QApplication.instance().processEvents()
+        assert not task_list._empty_block.isHidden()
+        assert task_list._empty_title.text() == "أنجزت كل مهام اليوم"
+        assert task_list._empty_body.text() == "أضف مهمة جديدة أو استمتع بالراحة."
+        assert not task_list._section_label.isHidden()
+        # All-done block sits above the completed group.
+        layout = task_list._layout
+        order = [layout.itemAt(i).widget() for i in range(layout.count())]
+        assert order.index(task_list._empty_block) < order.index(task_list._section_label)
+
+        todo = service.create_task(day.id, "نشطة")
+        assert todo is not None
+        task_list.set_tasks(service.get_today_tasks(day.id))
+        QApplication.instance().processEvents()
+        assert task_list._empty_block.isHidden()
+        assert not task_list._section_label.isHidden()
+    finally:
+        window.close()
 
 
 # ------------------------------------------------------------ Issue 3: date header
@@ -199,7 +245,7 @@ def test_date_header_three_line_hierarchy_and_geometry():
     header.show()
     QApplication.instance().processEvents()
     try:
-        assert header._day_number.text() == "10"
+        assert header._day_number.text() == "28"
         assert header._weekday_label.text() == "السبت"
         assert "هـ" in header._hijri_label.text()
         assert header._gregorian_label.text() == "أكتوبر 2026"
@@ -443,7 +489,7 @@ def test_checkbox_toggle_and_a11y_preserved(db_connection):
         item.completed_toggled.connect(lambda i, c: fired.append((i, c)))
         item._checkbox.click()
         assert fired == [(1, True)]
-        assert "تحديد إنجاز المهمة" in item._checkbox.accessibleName()
+        assert item._checkbox.accessibleName() == "م"
         item._checkbox.click()
         assert fired[-1] == (1, False)
     finally:

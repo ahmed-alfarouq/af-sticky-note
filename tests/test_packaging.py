@@ -136,10 +136,67 @@ def test_spec_hiddenimports_cover_category_ui_modules():
 
 
 def test_all_required_category_icon_assets_exist():
-    """Every initial category id resolves to a real icon file."""
+    """Every category id resolves to a real icon file."""
     icons_dir = Path(__file__).resolve().parent.parent / "assets" / "icons"
     assert icons_dir.is_dir()
-    for key in ("religion", "work", "life", "general"):
+    for key in ("general", "work", "personal", "study", "health", "home",
+                "religion", "life"):
         path = icons_dir / f"{key}.png"
         assert path.is_file(), f"missing icon asset for category {key!r}"
         assert path.stat().st_size > 0
+
+
+def test_frozen_layout_resolves_all_runtime_resources(tmp_path):
+    """With sys._MEIPASS pointed at a bundle tree, every runtime getter
+    resolves inside it (mirrors the PyInstaller onedir layout)."""
+    import sys as _sys
+
+    from app.infrastructure.paths import (
+        get_bundle_dir,
+        get_fonts_dir,
+        get_logo_path,
+        get_quotes_path,
+    )
+
+    bundle = tmp_path / "bundle"
+    (bundle / "assets" / "icons").mkdir(parents=True)
+    (bundle / "fonts" / "thmanyah").mkdir(parents=True)
+    (bundle / "data").mkdir(parents=True)
+    (bundle / "assets" / "icons" / "work.png").write_bytes(b"x")
+    (bundle / "fonts" / "thmanyah" / "f.otf").write_bytes(b"x")
+    (bundle / "data" / "quotes.txt").write_text("q", encoding="utf-8")
+    (bundle / "assets" / "logo.png").write_bytes(b"x")
+
+    original = getattr(_sys, "_MEIPASS", None)
+    try:
+        _sys._MEIPASS = str(bundle)
+        assert get_bundle_dir() == bundle
+        assert str(get_fonts_dir()).startswith(str(bundle))
+        assert str(get_quotes_path()).startswith(str(bundle))
+        assert str(get_logo_path()).startswith(str(bundle))
+        assert get_quotes_path().is_file()
+        assert get_logo_path().is_file()
+    finally:
+        if original is not None:
+            _sys._MEIPASS = original
+        else:
+            delattr(_sys, "_MEIPASS")
+
+
+def test_qtawesome_data_files_are_collectable():
+    """The icon font + glyph map required by the frozen app must be
+    discoverable through the same hook the spec uses."""
+    from PyInstaller.utils.hooks import collect_data_files
+
+    collected = collect_data_files("qtawesome")
+    sources = [src for src, _dest in collected]
+    assert any(src.endswith(".ttf") for src in sources)
+    assert any(src.endswith(".json") for src in sources)
+
+
+def test_spec_bundles_fonts_quotes_and_logo():
+    """Fonts, quotes seed, logo, and migrations ship in the frozen build."""
+    spec = _read_spec_text()
+    for fragment in ("fonts/thmanyah", "quotes.txt", "logo.png",
+                     "app/database/migrations", "assets/icons"):
+        assert fragment in spec, f"{fragment} missing from spec datas"

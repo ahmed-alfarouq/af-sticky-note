@@ -38,6 +38,7 @@ class TaskEditDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("تعديل المهمة")
         self.setModal(True)
+        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.resize(320, 220)
 
         layout = QVBoxLayout(self)

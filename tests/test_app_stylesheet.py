@@ -190,8 +190,8 @@ def test_application_stylesheet_reaches_the_widgets_it_targets():
             widget.style().polish(widget)
 
         # font-size comes from the sheet; the Qt default leaves pixelSize() at -1.
-        assert probes[0].font().pixelSize() == 14, (
-            "QLabel#taskTextLabel should get font-size 14px from the stylesheet "
+        assert probes[0].font().pixelSize() == 16, (
+            "QLabel#taskTextLabel should get font-size 16px from the stylesheet "
             f"(got {probes[0].font().pixelSize()}) -- the stylesheet was probably "
             "discarded by the QSS parser"
         )

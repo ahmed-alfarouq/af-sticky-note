@@ -10,7 +10,7 @@ RTL Arabic interface displaying:
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -24,14 +24,21 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core.models import Task, TaskPriority
+from app.core.models import Category, Task, TaskPriority
 from app.core.services.history_service import DayHistoryView, HistoryService
 from app.infrastructure.clock import format_dual_calendar_date
 from app.infrastructure.paths import get_logo_path
+from app.ui.category_icons import CategoryIconProvider
+from app.ui.category_presentation import category_icon_key, category_label
 from app.ui.priority_presentation import PRIORITY_LABELS
 from app.ui.styles.app_style import get_application_stylesheet
 
 logger = logging.getLogger(__name__)
+
+#: Fixed category-indicator geometry, mirroring TaskItem so historical rows
+#: align with live rows (shared footprint, never text in the row).
+HISTORY_CATEGORY_ICON_BOX = 22
+HISTORY_CATEGORY_ICON_PIXMAP = 18
 
 
 class HistoryWindow(QDialog):
@@ -42,9 +49,17 @@ class HistoryWindow(QDialog):
         history_service: HistoryService,
         initial_date: str,
         parent: Optional[QWidget] = None,
+        categories: Sequence[Category] = (),
+        icon_provider: Optional[CategoryIconProvider] = None,
     ) -> None:
         super().__init__(parent)
         self._history_service = history_service
+        # Category metadata supplied once per dialog (never per-row queries).
+        # Lookup is by stable id with graceful fallback, so rows stay correct
+        # even for categories absent from this list (e.g. deactivated after
+        # the fact or unknown ids) -- see _category_by_id.
+        self._categories: List[Category] = list(categories)
+        self._icon_provider = icon_provider
         self._available_dates: List[str] = self._history_service.get_available_dates()
         self._current_index: int = 0
 
@@ -200,6 +215,41 @@ class HistoryWindow(QDialog):
 
         self._task_layout.addStretch(1)
 
+    def _category_by_id(self, category_id: str) -> Optional[Category]:
+        for category in self._categories:
+            if category.id == category_id:
+                return category
+        return None
+
+    def _make_category_icon(self, task: Task) -> QLabel:
+        """Build the read-only category indicator for one historical task.
+
+        Unknown ids fall back to the raw id as the tooltip text and icon
+        key (the provider then yields its drawn fallback icon); without a
+        provider the label stays empty rather than inventing artwork.
+        """
+        from PySide6.QtGui import QIcon
+
+        icon_label = QLabel(self._task_container)
+        # Reuses the existing QSS rule (QLabel#taskCategoryIcon), so no new
+        # stylesheet surface is introduced.
+        icon_label.setObjectName("taskCategoryIcon")
+        icon_label.setFixedSize(HISTORY_CATEGORY_ICON_BOX, HISTORY_CATEGORY_ICON_BOX)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        category = self._category_by_id(task.category_id)
+        label = category_label(category) if category is not None else task.category_id
+        icon_label.setToolTip(label)
+        icon_label.setAccessibleName(f"فئة المهمة: {label}")
+        if self._icon_provider is not None:
+            key = category_icon_key(category) if category is not None else task.category_id
+            mode = QIcon.Mode.Disabled if task.is_completed else QIcon.Mode.Normal
+            icon_label.setPixmap(
+                self._icon_provider.icon_for_key(key).pixmap(
+                    HISTORY_CATEGORY_ICON_PIXMAP, HISTORY_CATEGORY_ICON_PIXMAP, mode
+                )
+            )
+        return icon_label
+
     def _create_read_only_task_row(self, task: Task) -> QFrame:
         """Create a purely read-only visual representation of a historical task."""
         frame = QFrame(self._task_container)
@@ -227,6 +277,13 @@ class HistoryWindow(QDialog):
 
         row.addWidget(indicator)
         row.addWidget(text_label, 1)
+
+        # Historical category, shown exactly as recorded on that day: the
+        # shared cached icon with the Arabic name in the tooltip (the same
+        # icon-only convention as live TaskItem rows, so row text never
+        # carries category names). Read-only: resolved from the supplied
+        # metadata, never queried per row, never mutated.
+        row.addWidget(self._make_category_icon(task))
 
         # Historical priority, shown exactly as it was recorded on that day.
         # Read-only: the HistoryService never mutates task records.

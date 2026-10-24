@@ -67,7 +67,6 @@ class PrioritySelector(QComboBox):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("prioritySelector")
-        self.setAccessibleName("أولوية المهمة")
         self.setAccessibleDescription("اختر أولوية المهمة: عاجل أو عادي أو منخفض")
         self.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         # Compact: never wider than its own contents, so it cannot compete
@@ -89,6 +88,8 @@ class PrioritySelector(QComboBox):
             item.setIcon(priority_dot_icon(PRIORITY_ORDER[row]))
 
         self.setCurrentIndex(self._index_of(TaskPriority.MEDIUM))
+        self._refresh_accessible_name()
+        self.currentIndexChanged.connect(lambda _index: self._refresh_accessible_name())
 
     def showPopup(self) -> None:  # noqa: N802 - Qt naming
         """Widen the popup view to fit the widest item before showing."""
@@ -119,9 +120,15 @@ class PrioritySelector(QComboBox):
         target = priority if isinstance(priority, TaskPriority) else TaskPriority.MEDIUM
         index = self._index_of(target)
         if index == self.currentIndex():
+            self._refresh_accessible_name()
             return
         self.blockSignals(True)
         try:
             self.setCurrentIndex(index)
         finally:
             self.blockSignals(False)
+        self._refresh_accessible_name()
+
+    def _refresh_accessible_name(self) -> None:
+        """Accessible name carries the current label (v3 §14)."""
+        self.setAccessibleName(f"الأولوية: {priority_label(self.selected_priority())}")

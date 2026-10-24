@@ -7,7 +7,7 @@ including PySide6, bundled Thmanyah fonts, initial quotes seed, and app modules.
 import os
 import sys
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
@@ -20,6 +20,9 @@ datas = [
     (str(repo_root / "data" / "quotes.txt"), "data"),
     (str(repo_root / "fonts" / "thmanyah"), "fonts/thmanyah"),
     (str(repo_root / "app" / "database" / "migrations"), "app/database/migrations"),
+    # qtawesome icon font (.ttf) + glyph name map (.json); no built-in hook
+    # ships them (v3 §1.4). A missing font renders blank buttons in the exe.
+    *collect_data_files("qtawesome"),
 ]
 
 hiddenimports = [
@@ -68,6 +71,7 @@ hiddenimports = [
     "app.ui",
     "app.ui.category_icons",
     "app.ui.category_presentation",
+    "app.ui.icons",
     "app.ui.geometry_manager",
     "app.ui.styles",
     "app.ui.styles.app_style",
@@ -85,6 +89,8 @@ hiddenimports = [
     "app.ui.windows.history_window",
     "app.ui.windows.main_window",
     "app.ui.windows.settings_window",
+    "qtawesome",
+    "qtpy",
     "sqlite3",
 ]
 

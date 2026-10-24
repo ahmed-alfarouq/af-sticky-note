@@ -51,20 +51,26 @@ def test_category_model_is_qt_free_and_sql_free():
 def test_list_all_returns_seeds_in_sort_order(db_connection):
     categories = CategoryRepository(db_connection).list_all()
     assert [(c.id, c.sort_order) for c in categories] == [
-        ("religion", 10),
+        ("general", 10),
         ("work", 20),
-        ("life", 30),
-        ("general", 40),
+        ("personal", 30),
+        ("study", 40),
+        ("health", 50),
+        ("home", 60),
+        ("religion", 70),
+        ("life", 80),
     ]
 
 
 def test_list_active_excludes_deactivated(db_connection):
     repo = CategoryRepository(db_connection)
-    assert len(repo.list_active()) == 4
+    assert len(repo.list_active()) == 8
     repo.set_active("work", False)
-    assert [c.id for c in repo.list_active()] == ["religion", "life", "general"]
+    assert [c.id for c in repo.list_active()] == [
+        "general", "personal", "study", "health", "home", "religion", "life",
+    ]
     # Full listing still contains the inactive row (history stays valid).
-    assert len(repo.list_all()) == 4
+    assert len(repo.list_all()) == 8
 
 
 def test_get_by_id_returns_none_for_unknown(db_connection):

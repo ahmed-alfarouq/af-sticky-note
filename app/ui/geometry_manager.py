@@ -23,11 +23,11 @@ from app.config.settings import APP_NAME, ORG_NAME
 
 logger = logging.getLogger(__name__)
 
-# Default geometry fallbacks
+# Default geometry fallbacks (v3 §2: 380x640 default, 320x480 minimum)
 DEFAULT_WIDTH = 380
-DEFAULT_HEIGHT = 560
+DEFAULT_HEIGHT = 640
 MIN_WIDTH = 320
-MIN_HEIGHT = 420
+MIN_HEIGHT = 480
 
 
 class WindowGeometryManager:

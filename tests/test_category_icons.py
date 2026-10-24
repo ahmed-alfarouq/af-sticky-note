@@ -35,6 +35,36 @@ def test_all_four_initial_category_icons_exist():
         assert path.stat().st_size > 0
 
 
+def test_new_category_icons_exist_as_distinct_files():
+    """Phase 0I: personal/study/health/home ship real 64px PNG assets."""
+    icons = _repo_icons_dir()
+    blobs = {}
+    for key in ("personal", "study", "health", "home"):
+        path = icons / f"{key}.png"
+        assert path.is_file(), f"missing category icon asset: {path}"
+        data = path.read_bytes()
+        assert len(data) > 0
+        blobs[key] = data
+    assert len(set(blobs.values())) == 4, "new category icons must be distinct"
+
+
+def test_new_category_icons_resolve_through_provider():
+    """Each new key resolves to its real file (not the fallback) and paints."""
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.ui.category_icons import CategoryIconProvider
+
+    provider = CategoryIconProvider(_repo_icons_dir())
+    for key in ("personal", "study", "health", "home"):
+        assert provider.icon_path_for_key(key) is not None
+        icon = provider.icon_for_key(key)
+        assert not icon.isNull()
+        assert not icon.pixmap(18, 18).isNull()
+        # Cached: repeated lookups never re-read the file.
+        assert provider.icon_for_key(key) is icon
+
+
 def test_existing_icon_resolves_and_loads():
     if _skip_without_qt():
         return

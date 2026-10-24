@@ -107,15 +107,25 @@ def test_main_window_header_action_buttons_exist_and_wired():
 
         assert hasattr(window, "_settings_btn")
         assert window._settings_btn is not None
-        assert window._settings_btn.text() == "⚙"
+        assert window._settings_btn.text() == ""
+        assert window._settings_btn.toolTip() == "إعدادات"
+        assert not window._settings_btn.icon().isNull()
 
-        assert hasattr(window, "_history_btn")
-        assert window._history_btn is not None
-        assert window._history_btn.text() == "📄"
+        assert hasattr(window, "_archive_btn")
+        assert window._archive_btn is not None
+        assert window._archive_btn.text() == ""
+        assert window._archive_btn.toolTip() == "الأرشيف"
+        assert not window._archive_btn.icon().isNull()
 
-        assert hasattr(window, "_exit_btn")
-        assert window._exit_btn is not None
-        assert window._exit_btn.text() == "✕"
+        assert hasattr(window, "_close_btn")
+        assert window._close_btn is not None
+        assert window._close_btn.text() == ""
+        assert window._close_btn.toolTip() == "إغلاق"
+        assert not window._close_btn.icon().isNull()
+
+        assert hasattr(window, "_pin_btn")
+        assert window._pin_btn is not None
+        assert window._pin_btn.toolTip() in ("تثبيت على سطح المكتب", "إلغاء التثبيت")
 
         # Verify layout direction is RightToLeft (anchoring buttons to the right side in RTL)
         assert window._header_frame.layoutDirection() == Qt.LayoutDirection.RightToLeft
@@ -142,8 +152,8 @@ def test_main_window_exit_control_invokes_shared_shutdown():
             on_exit_requested=mock_exit_cb,
         )
 
-        assert hasattr(window, "_exit_btn")
-        assert window._exit_btn is not None
+        assert hasattr(window, "_close_btn")
+        assert window._close_btn is not None
         assert hasattr(window, "_header_frame")
         # Verify _header_frame has RightToLeft layout direction
         from PySide6.QtCore import Qt

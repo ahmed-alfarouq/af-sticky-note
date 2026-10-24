@@ -409,11 +409,27 @@ class _FakeGeometryManager:
         self.saved.append((x, y, width, height))
 
 
+class _FakePinState:
+    """Hermetic pin state: never touches the real QSettings store."""
+
+    def __init__(self, pinned: bool = True) -> None:
+        self._pinned = pinned
+        self.saved: List[bool] = []
+
+    def is_pinned(self) -> bool:
+        return self._pinned
+
+    def save_pinned(self, pinned: bool) -> None:
+        self._pinned = pinned
+        self.saved.append(pinned)
+
+
 def _make_window(
     geometry_manager=None,
     on_exit_requested=None,
     width: int = 380,
     height: int = 560,
+    pin_state_manager=None,
 ):
     from unittest.mock import MagicMock
 
@@ -428,6 +444,7 @@ def _make_window(
         task_service=MagicMock(spec=TaskService),
         geometry_manager=geometry_manager or _FakeGeometryManager(),
         on_exit_requested=on_exit_requested or MagicMock(),
+        pin_state_manager=pin_state_manager or _FakePinState(),
     )
     window.resize(width, height)
     return window
@@ -443,8 +460,9 @@ def test_main_window_builds_a_shape_for_its_size():
     QApplication.instance().processEvents()
 
     assert window._note_shape is not None
-    assert window._note_shape.width == float(window.width())
-    assert window._note_shape.height == float(window.height())
+    paper = window._paper_surface.geometry()
+    assert window._note_shape.width == float(paper.width())
+    assert window._note_shape.height == float(paper.height())
     assert window._paper_surface.shape is window._note_shape
 
 
@@ -459,21 +477,32 @@ def test_main_window_mask_follows_the_window_size():
 
     mask = window.mask()
     assert mask is not None
-    assert mask.boundingRect().getCoords() == (0, 0, window.width() - 1, window.height() - 1)
-    assert mask.contains(QPoint(int(window.width() / 2), int(window.height() / 2)))
+    # The paper sits inside the 32 px shadow margin: the mask is the paper
+    # silhouette translated to its window position, leaving the margin
+    # click-through.
+    paper = window._paper_surface.geometry()
+    assert mask.boundingRect().getCoords() == (
+        32, 32, 32 + paper.width() - 1, 32 + paper.height() - 1,
+    )
+    assert mask.contains(QPoint(32 + paper.width() // 2, 32 + paper.height() // 2))
     assert not mask.contains(QPoint(1, 1))
 
     # Resize: the mask must be rebuilt for the new size, not left stale.
     window.resize(520, 700)
     QApplication.instance().processEvents()
 
+    paper = window._paper_surface.geometry()
     resized_mask = window.mask()
     assert resized_mask is not None
-    assert resized_mask.boundingRect().getCoords() == (0, 0, 519, 699)
-    assert resized_mask.contains(QPoint(260, 350))
-    assert resized_mask.contains(QPoint(519, 699))     # solid bottom-right corner
-    assert not resized_mask.contains(QPoint(1, 1))     # rounded corner stays outside
-    assert window._note_shape.width == 520.0
+    assert resized_mask.boundingRect().getCoords() == (
+        32, 32, 32 + paper.width() - 1, 32 + paper.height() - 1,
+    )
+    assert resized_mask.contains(QPoint(32 + paper.width() // 2, 32 + paper.height() // 2))
+    # Inside the solid area near the bottom-right corner (clear of the
+    # shallow organic tears, which rise at most 6 px).
+    assert resized_mask.contains(QPoint(32 + paper.width() - 9, 32 + paper.height() - 9))
+    assert not resized_mask.contains(QPoint(33, 33))     # rounded corner stays outside
+    assert window._note_shape.width == float(paper.width())
 
 
 def test_main_window_shape_regenerates_after_a_resize_but_not_while_painting():
@@ -525,16 +554,17 @@ def test_main_window_keeps_its_minimum_size_and_window_flags():
     assert not flags & Qt.WindowType.WindowStaysOnTopHint
     assert window.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-    # Minimum size is unchanged, and the silhouette is valid at that size.
+    # Minimum size follows the v3 shell contract, and the silhouette is valid there.
     assert window.minimumSize().width() == 320
-    assert window.minimumSize().height() == 420
+    assert window.minimumSize().height() == 480
     window.show()
     QApplication.instance().processEvents()
-    window.resize(320, 420)
+    window.resize(320, 480)
     QApplication.instance().processEvents()
-    assert window._note_shape.width == 320.0
-    assert window._note_shape.height == 420.0
-    assert window.mask().contains(QPoint(160, 210))
+    paper = window._paper_surface.geometry()
+    assert window._note_shape.width == float(paper.width())
+    assert window._note_shape.height == float(paper.height())
+    assert window.mask().contains(QPoint(32 + paper.width() // 2, 32 + paper.height() // 2))
 
 
 def test_main_window_content_stays_inside_the_paper():
@@ -548,13 +578,15 @@ def test_main_window_content_stays_inside_the_paper():
 
     width, height = window.width(), window.height()
     deepest_tear = max((depth for _, _, depth in window._note_shape.tears), default=0.0)
-    # Content must stop above the deepest nick in the organic bottom edge.
-    bottom_limit = height - deepest_tear
+    # Content lives inside the paper (inset by the shadow margin); it must
+    # stop above the deepest nick in the organic bottom edge.
+    paper = window._paper_surface.geometry()
+    bottom_limit = paper.height() - deepest_tear
 
     for attribute in ("_header_frame", "_quote_widget", "_task_list", "_task_input"):
         geometry = getattr(window, attribute).geometry()
         assert geometry.left() >= 0
-        assert geometry.right() <= width
+        assert geometry.right() <= paper.width()
         assert geometry.top() >= 0
         assert geometry.bottom() <= bottom_limit, (
             f"{attribute} overlaps the organic bottom edge"
@@ -575,16 +607,17 @@ def test_main_window_header_controls_remain_independent_interactions():
 
     # Header (the drag area) is inside the paper and separate from the buttons.
     header = window._header_frame.geometry()
+    paper = window._paper_surface.geometry()
     assert window._note_shape is not None
-    assert header.left() >= 0 and header.right() <= window.width()
+    assert header.left() >= 0 and header.right() <= paper.width()
 
-    for button in (window._settings_btn, window._history_btn, window._exit_btn):
+    for button in (window._pin_btn, window._archive_btn, window._settings_btn, window._close_btn):
         assert button.geometry().intersects(header)
 
-    # The three controls are distinct widgets with distinct accessible names.
-    names = {window._settings_btn.accessibleName(), window._history_btn.accessibleName(),
-             window._exit_btn.accessibleName()}
-    assert len(names) == 3
+    # The four controls are distinct widgets with distinct accessible names.
+    names = {window._pin_btn.accessibleName(), window._archive_btn.accessibleName(),
+             window._settings_btn.accessibleName(), window._close_btn.accessibleName()}
+    assert len(names) == 4
 
     # Exit still routes through the shared shutdown callback.
     window._on_exit_clicked()
@@ -621,8 +654,9 @@ def test_main_window_restores_geometry_and_derives_the_shape_from_it():
     QApplication.instance().processEvents()
 
     assert window.geometry().getRect() == (120, 80, 420, 640)
-    assert window._note_shape.width == 420.0
-    assert window._note_shape.height == 640.0
+    paper = window._paper_surface.geometry()
+    assert window._note_shape.width == float(paper.width())
+    assert window._note_shape.height == float(paper.height())
 
 
 def test_shape_modules_stay_free_of_platform_specific_code():

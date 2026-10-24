@@ -91,7 +91,7 @@ def test_date_header_shows_hierarchy(db_connection):
 
     header = DateHeaderWidget("2026-10-08")
     header.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-    assert header._day_number.text() == "8"
+    assert header._day_number.text() == "26"
     assert header._weekday_label.text() == "الخميس"
     assert "أكتوبر 2026" in header._secondary_label.text()
     assert "هـ" in header._secondary_label.text()
@@ -278,7 +278,7 @@ def test_all_sections_coexist_without_horizontal_scroll(db_connection, size):
                  "_task_list", "_task_input", "_add_btn"):
         widget = getattr(window, name)
         assert widget.isVisible(), name
-    assert "8" in window._date_header._day_number.text()
+    assert "26" in window._date_header._day_number.text()
     assert window._task_list.horizontalScrollBar().maximum() == 0
     window.close()
 
@@ -296,3 +296,74 @@ def test_add_button_and_selectors_survive_refinement(db_connection):
     tasks = service.get_today_tasks(day.id)
     assert [(t.text, t.category_id) for t in tasks] == [("عبر الزر", "work")]
     window.close()
+
+
+def test_input_placeholder_and_accessible_name_match_dock_contract(db_connection):
+    """v3 §8.1 placeholder and accessible names on the dock input."""
+    if _skip_without_qt():
+        return
+    _qt_app()
+    service, category_service, provider, day_repo, _ = _wiring(db_connection)
+    day = day_repo.create("2026-10-08")
+    window = _make_window(service, category_service, provider, day)
+    try:
+        assert window._task_input.placeholderText() == "اكتب مهمة جديدة…"
+        assert window._task_input.accessibleName() == "مهمة جديدة"
+        assert window._add_btn.accessibleName() == "إضافة المهمة"
+    finally:
+        window.close()
+
+
+def test_add_button_disabled_for_blank_input(db_connection):
+    """v3 §8.1 disabled-when-empty: no task, no inconsistent state."""
+    if _skip_without_qt():
+        return
+    _qt_app()
+    service, category_service, provider, day_repo, _ = _wiring(db_connection)
+    day = day_repo.create("2026-10-08")
+    window = _make_window(service, category_service, provider, day)
+    try:
+        assert window._add_btn.isEnabled() is False
+        window._task_input.setText("   ")
+        assert window._add_btn.isEnabled() is False
+        window._task_input.setText("مهمة")
+        assert window._add_btn.isEnabled() is True
+        window._add_btn.setEnabled(False)
+        window._add_btn.click()
+        assert service.get_today_tasks(day.id) == []
+        assert window._task_input.text() == "مهمة"
+    finally:
+        window.close()
+
+
+def test_new_task_scrolled_into_view(db_connection):
+    """The created row is scrolled visible without rebuilding the list."""
+    if _skip_without_qt():
+        return
+    _qt_app()
+    service, category_service, provider, day_repo, _ = _wiring(db_connection)
+    day = day_repo.create("2026-10-08")
+    for index in range(12):
+        created = service.create_task(day.id, f"مهمة {index}")
+        assert created is not None
+    window = _make_window(service, category_service, provider, day)
+    window._task_list.set_tasks(service.get_today_tasks(day.id))
+    try:
+        window.resize(320, 420)
+        window.show()
+        QApplication.instance().processEvents()
+        window._category_selector.set_category("health")
+        window._on_task_submitted("الأخيرة")
+        QApplication.instance().processEvents()
+        tasks = service.get_today_tasks(day.id)
+        assert tasks[-1].text == "الأخيرة" and tasks[-1].category_id == "health"
+        # The list scrolled down to the new row (visibleRegion() is not
+        # meaningful offscreen, so assert scroll position instead).
+        bar = window._task_list.verticalScrollBar()
+        assert bar.value() > 0
+        item = window._task_list._items[tasks[-1].id]
+        viewport = window._task_list.viewport()
+        top_in_view = item.y() - bar.value()
+        assert 0 <= top_in_view < viewport.height()
+    finally:
+        window.close()

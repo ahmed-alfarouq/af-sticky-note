@@ -7,6 +7,7 @@ one place if it ever needs to control "now".
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Tuple
 
@@ -50,6 +51,52 @@ ARABIC_WEEKDAYS = (
     "السبت",
     "الأحد",
 )
+
+
+@dataclass(frozen=True)
+class DateDisplay:
+    """Domain-layer date contract (v3 §5.1): raw calendar data, no widgets.
+
+    The UI formats strings from these fields and never derives calendar
+    data itself. All numerals are Western digits; Arabic presentation
+    (month/weekday names) comes from the shared tables above.
+    """
+
+    iso_date: str
+    weekday_ar: str
+    hijri_day: int
+    hijri_month_name: str
+    hijri_year: int
+    gregorian_day: int
+    gregorian_month_name: str
+    gregorian_year: int
+
+
+def date_display(iso_date: str) -> DateDisplay | None:
+    """Build the :class:`DateDisplay` for an ISO date, or None when invalid.
+
+    Invalid input yields None (callers fall back to raw display) instead of
+    raising, matching :func:`get_date_parts` degradation behavior.
+    """
+    try:
+        parts = [int(p) for p in iso_date.split("-")]
+        if len(parts) != 3:
+            raise ValueError(iso_date)
+        g_year, g_month, g_day = parts
+        current = date(g_year, g_month, g_day)
+    except Exception:
+        return None
+    hijri_year, hijri_month, hijri_day = gregorian_to_hijri(g_year, g_month, g_day)
+    return DateDisplay(
+        iso_date=iso_date,
+        weekday_ar=ARABIC_WEEKDAYS[current.weekday()],
+        hijri_day=hijri_day,
+        hijri_month_name=HIJRI_MONTHS[hijri_month - 1] if 1 <= hijri_month <= 12 else str(hijri_month),
+        hijri_year=hijri_year,
+        gregorian_day=g_day,
+        gregorian_month_name=ARABIC_GREGORIAN_MONTHS[g_month - 1] if 1 <= g_month <= 12 else str(g_month),
+        gregorian_year=g_year,
+    )
 
 
 def get_date_parts(iso_date: str) -> Tuple[str, str, str, str]:

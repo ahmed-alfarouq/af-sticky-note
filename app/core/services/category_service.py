@@ -20,6 +20,15 @@ class CategoryService:
         """Categories the UI may offer, in deterministic sort_order."""
         return self._category_repo.list_active()
 
+    def list_all_categories(self) -> List[Category]:
+        """Every known category, including inactive ones, in sort_order.
+
+        For read-only surfaces (e.g. History) that must keep identifying
+        tasks recorded under a since-deactivated category. Never use this
+        for new-task selection -- that stays active-only.
+        """
+        return self._category_repo.list_all()
+
     def get_category(self, category_id: str) -> Optional[Category]:
         """Return the category for a stable id, or None when unknown."""
         if not isinstance(category_id, str) or not category_id:

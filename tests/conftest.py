@@ -1,6 +1,8 @@
 """Shared pytest fixtures. All use pytest's tmp_path — never a real
 application-data directory."""
+import os
 import random
+import sys
 
 import pytest
 
@@ -11,7 +13,56 @@ from app.database.migrations import apply_migrations
 from app.database.quote_repository import QuoteRepository
 from app.database.quote_rotation_state_repository import QuoteRotationStateRepository
 from app.database.quote_usage_repository import QuoteUsageRepository
+from app.database.task_repository import TaskRepository
 from app.database.unit_of_work import UnitOfWork
+
+
+def _gui_bootstrap_available() -> bool:
+    """Whether a QApplication can be created safely in this environment."""
+    try:
+        from PySide6.QtWidgets import QApplication
+    except Exception:
+        return False
+    if QApplication.instance() is not None:
+        return True
+    # Explicit platform (e.g. QT_QPA_PLATFORM=offscreen), a display server,
+    # or native Windows (QApplication creation is display-safe there).
+    return bool(
+        os.environ.get("QT_QPA_PLATFORM")
+        or os.environ.get("DISPLAY")
+        or os.environ.get("WAYLAND_DISPLAY")
+        or sys.platform == "win32"
+    )
+
+
+_fonts_bootstrapped = False
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _production_fonts():
+    """Mirror production bootstrap: register bundled fonts before UI tests.
+
+    ``app.main.bootstrap_application`` loads the Thmanyah bundle before any
+    widget exists, so every shipped pixel is measured with real Arabic-capable
+    fonts. Widget tests that measure text layout must see the same font
+    environment; otherwise complex-script wrapping assertions measure a
+    configuration that never ships (e.g. zero font families offscreen).
+    Skips gracefully where no GUI platform is available.
+    """
+    global _fonts_bootstrapped
+    if _fonts_bootstrapped or not _gui_bootstrap_available():
+        return
+    try:
+        from PySide6.QtWidgets import QApplication
+
+        QApplication.instance() or QApplication([])
+        from app.infrastructure.fonts import load_application_fonts
+        from app.infrastructure.paths import get_fonts_dir
+
+        load_application_fonts(get_fonts_dir())
+        _fonts_bootstrapped = True
+    except Exception:
+        return
 
 
 @pytest.fixture()
@@ -35,6 +86,11 @@ def quote_repo(db_connection):
 @pytest.fixture()
 def day_repo(db_connection):
     return DayRepository(db_connection)
+
+
+@pytest.fixture()
+def task_repo(db_connection):
+    return TaskRepository(db_connection)
 
 
 @pytest.fixture()

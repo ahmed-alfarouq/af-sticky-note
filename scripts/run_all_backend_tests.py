@@ -373,10 +373,52 @@ class Mark:
 
     @staticmethod
     def parametrize(argnames, argvalues, **_kwargs):
-        """Record a parametrisation; the runner expands it after import."""
+        """Record a parametrisation; the runner expands it after import.
+
+        The recorded spec is the *single source of truth* for both the declared
+        case count and the cases that execute, so it is materialised here, once,
+        at decoration time.
+
+        ``_expand_parametrised`` is evaluated more than once per test function
+        -- once to count the declared cases, then once per case to run it -- and
+        it builds ``list(argvalues)`` on every one of those passes. A re-iterable
+        input (list, tuple, dict, set) is unaffected by that, but a one-shot
+        iterable is not: a generator, a ``map`` object, or a file handle is
+        drained by the counting pass, so every case it carried disappears before
+        the execution pass ever sees them. Declared cases would then be counted
+        and never invoked, and the accounting identity would report a runner
+        defect over a test file that is perfectly valid pytest.
+
+        Materialising once here means both passes observe exactly the same
+        values in exactly the same order, which is what makes the identity
+        trustworthy rather than accidentally true.
+
+        ``argnames`` is stabilised only when it is not already a string: the
+        common ``"a, b"`` form is split on commas later, and materialising it
+        would reduce it to a list of characters. A non-string iterable of names
+        carries the identical one-shot hazard -- and before this change it was
+        the worse of the two, because an exhausted name iterator reads as
+        *empty* argnames and raised ``UnsupportedPytestAPI`` from inside the
+        execution loop, which is not caught anywhere: the run died with an
+        unhandled traceback and printed no summary at all. Both hazards are
+        closed here.
+
+        Note that a value which is not iterable at all is *not* handled here:
+        ``static_intent`` calls ``len()`` on the decorator's argument before
+        the module is ever imported, so such a file raises ``TypeError`` from
+        the static pass exactly as it did before. That pre-existing crash is
+        untouched by this change.
+        """
+        # Materialise here, in `parametrize` itself, rather than inside the
+        # returned decorator: this runs exactly once per parametrize call even
+        # if the same decorator object is applied to several functions, and it
+        # avoids rebinding a closure variable (which would be a local name).
+        names = argnames if isinstance(argnames, str) else list(argnames)
+        values = list(argvalues)
+
         def decorator(fn):
             specs = getattr(fn, "_runner_parametrize", [])
-            specs.append((argnames, argvalues))
+            specs.append((names, values))
             fn._runner_parametrize = specs
             return fn
         return decorator
@@ -568,6 +610,12 @@ def _expand_parametrised(fn):
 
     Stacked ``@pytest.mark.parametrize`` decorators produce the cartesian
     product, matching pytest's own behaviour.
+
+    This is called once to count declared cases and once per case to execute,
+    so it must be idempotent. It is, because ``Mark.parametrize`` has already
+    materialised the recorded spec: the ``list()`` below copies an already
+    stable sequence instead of draining a one-shot iterable. Do not remove it
+    -- it is what keeps a second evaluation harmless.
     """
     specs = getattr(fn, "_runner_parametrize", None)
     if not specs:

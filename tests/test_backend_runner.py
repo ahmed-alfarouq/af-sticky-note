@@ -1121,3 +1121,250 @@ def test_dynamic_parametrize_mixed_with_skips_stays_consistent(tmp_path):
 # and reading the two printed identities off the output -- which is exactly
 # what the two cases above pin down on fixtures that reproduce the defect in
 # isolation.
+
+
+# --------------------------------------------------------------------------- #
+# 11. One-shot iterables must survive being evaluated more than once
+# --------------------------------------------------------------------------- #
+
+# The runner evaluates a parametrisation twice per test function: once to count
+# the declared cases, then once per case to execute it. A re-iterable input
+# (list, tuple, dict, set) does not care, but a one-shot iterable -- a
+# generator, a `map` object, an `iter(...)` -- is drained by the first pass.
+# Before the recorder was fixed, that silently deleted cases from the run and
+# broke the accounting identity. These fixtures are deliberately one-shot, and
+# each one carries a *distinguishable* value so a dropped, duplicated, or
+# mis-assigned case shows up as a wrong count or a failed check rather than
+# slipping through.
+#
+# Every case below runs the runner against a throwaway `tmp_path`, never
+# against the project's own suite: see the note at the end of section 10 for
+# why a case here must not do that.
+
+ONE_SHOT_GENERATOR_FILE = '''
+import pytest
+
+
+def _widths():
+    yield 320
+    yield 380
+    yield 600
+
+
+@pytest.mark.parametrize("width", _widths())
+def test_each_width_is_supported(width):
+    assert width in (320, 380, 600)
+'''
+
+ONE_SHOT_MAP_FILE = '''
+import pytest
+
+
+@pytest.mark.parametrize("n", map(lambda x: x * 2, [1, 2, 3]))
+def test_each_double_is_even(n):
+    assert n in (2, 4, 6)
+'''
+
+ONE_SHOT_STACKED_FILE = '''
+import pytest
+
+
+def _texts():
+    yield "a"
+    yield "b"
+
+
+def _widths():
+    yield 320
+    yield 380
+
+
+@pytest.mark.parametrize("text", _texts())
+@pytest.mark.parametrize("width", _widths())
+def test_cartesian_product(text, width):
+    assert text in ("a", "b")
+    assert width in (320, 380)
+'''
+
+ONE_SHOT_NAMES_FILE = '''
+import pytest
+
+
+@pytest.mark.parametrize(iter(["a", "b"]), [(1, 2), (3, 4)])
+def test_each_pair(a, b):
+    assert (a, b) in ((1, 2), (3, 4))
+'''
+
+MIXED_LIST_AND_GENERATOR_FILE = '''
+import pytest
+
+
+def _sizes():
+    yield 320
+    yield 380
+
+
+@pytest.mark.parametrize("width", [320, 380])
+def test_list_case(width):
+    assert width in (320, 380)
+
+
+@pytest.mark.parametrize("width", _sizes())
+def test_generator_case(width):
+    assert width in (320, 380)
+'''
+
+EMPTY_ONE_SHOT_FILE = '''
+import pytest
+
+
+def _nothing():
+    return
+    yield  # pragma: no cover - never reached, this is an empty generator
+
+
+@pytest.mark.parametrize("x", _nothing())
+def test_needs_a_value(x):
+    assert x
+'''
+
+
+def test_a_one_shot_generator_is_fully_counted_and_fully_executed(tmp_path):
+    """A generator's cases must be counted *and* run, not drained by counting.
+
+    Three values are yielded. If the counting pass consumed the generator, the
+    execution pass would see an empty sequence and call the function once with
+    no argument at all -- so `verified` would be 0 and `failed` would be 1.
+    Every value is distinct, so a substituted or duplicated value cannot pass
+    the fixture's own check either.
+    """
+    code, out, err = _run_runner(
+        tmp_path, ("test_gen.py", ONE_SHOT_GENERATOR_FILE)
+    )
+
+    assert "3 case(s) across 1 function(s)" in out, out
+    assert _summary_line(out, "verified") == 3, out
+    assert _summary_line(out, "invoked") == 3, out
+    assert _summary_line(out, "failed") == 0, out
+    assert _summary_line(out, "not-run") == 0, out
+    assert "Accounting: declared 3 = invoked 3 + not invoked 0 + blocked 0" in out, out
+    assert "invoked 3 = verified 3 + failed 0 + skipped 0 + not-run 0" in out, out
+    assert "COVERAGE: 3 of 3 declared case(s) verified (100%)" in out, out
+    assert "!! the totals above do not add up" not in out, out
+    assert "RESULT: OK" in out, out
+    assert code == 0, (code, out, err)
+
+
+def test_declared_and_invoked_agree_for_a_map_object(tmp_path):
+    """`map` is one-shot too; it must not lose its cases either.
+
+    This is the same defect wearing a different type, and it is asserted
+    separately because the fix has to hold for every one-shot iterable rather
+    than only for generators.
+    """
+    code, out, err = _run_runner(tmp_path, ("test_map.py", ONE_SHOT_MAP_FILE))
+
+    assert "3 case(s) across 1 function(s)" in out, out
+    assert _summary_line(out, "verified") == 3, out
+    assert _summary_line(out, "invoked") == 3, out
+    assert "Accounting: declared 3 = invoked 3 + not invoked 0 + blocked 0" in out, out
+    assert "!! the totals above do not add up" not in out, out
+    assert "RESULT: OK" in out, out
+    assert code == 0, (code, out, err)
+
+
+def test_stacked_one_shot_generators_keep_their_order_and_product(tmp_path):
+    """Ordering and the cartesian product must survive materialisation.
+
+    Two stacked generators of two values each must still produce four cases in
+    the same order as the equivalent stacked lists. A fix that merely counted
+    the iterable once, or that reversed it, would break either the product or
+    the ordering.
+    """
+    code, out, err = _run_runner(
+        tmp_path, ("test_stacked.py", ONE_SHOT_STACKED_FILE)
+    )
+
+    assert "4 case(s) across 1 function(s)" in out, out
+    assert _summary_line(out, "verified") == 4, out
+    assert _summary_line(out, "invoked") == 4, out
+    assert "Accounting: declared 4 = invoked 4 + not invoked 0 + blocked 0" in out, out
+    assert "!! the totals above do not add up" not in out, out
+    assert "RESULT: OK" in out, out
+    assert code == 0, (code, out, err)
+
+
+def test_a_one_shot_argnames_iterator_no_longer_crashes_the_run(tmp_path):
+    """A one-shot `argnames` must not kill the run without a summary.
+
+    This was the worse half of the same defect: an exhausted name iterator
+    reads as *empty* argnames, which raised UnsupportedPytestAPI from inside
+    the execution loop -- a place nothing catches. The run died with an
+    unhandled traceback and printed no summary at all, so a reader could not
+    even tell what had happened. The runner must instead produce a complete,
+    self-consistent summary.
+    """
+    code, out, err = _run_runner(
+        tmp_path, ("test_names.py", ONE_SHOT_NAMES_FILE)
+    )
+
+    # A full summary must be printed, not a bare traceback.
+    assert "Declared by the test files:" in out, out
+    assert "Accounting:" in out, out
+    assert "2 case(s) across 1 function(s)" in out, out
+    assert _summary_line(out, "verified") == 2, out
+    assert _summary_line(out, "invoked") == 2, out
+    assert "Accounting: declared 2 = invoked 2 + not invoked 0 + blocked 0" in out, out
+    assert "!! the totals above do not add up" not in out, out
+    assert "RESULT: OK" in out, out
+    assert code == 0, (code, out, err)
+
+
+def test_list_parametrization_is_unaffected_by_the_materialisation(tmp_path):
+    """Re-iterable inputs must behave exactly as before.
+
+    The fix freezes the recorded spec, so a list and a generator sitting in the
+    same file must both still expand to their full case counts. This is the
+    guard against a fix that only works for generators.
+    """
+    code, out, err = _run_runner(
+        tmp_path, ("test_mixed.py", MIXED_LIST_AND_GENERATOR_FILE)
+    )
+
+    assert "4 case(s) across 2 function(s)" in out, out
+    assert _summary_line(out, "verified") == 4, out
+    assert _summary_line(out, "invoked") == 4, out
+    assert "Accounting: declared 4 = invoked 4 + not invoked 0 + blocked 0" in out, out
+    assert "invoked 4 = verified 4 + failed 0 + skipped 0 + not-run 0" in out, out
+    assert "!! the totals above do not add up" not in out, out
+    assert "RESULT: OK" in out, out
+    assert code == 0, (code, out, err)
+
+
+def test_an_empty_one_shot_iterable_stays_honest_and_unchanged(tmp_path):
+    """An empty parameter set is reported as what it is, not hidden.
+
+    The behaviour pinned here is *unchanged* by the materialisation fix and was
+    measured to be byte-identical before and after it: an empty parametrize
+    contributes no cases, so the function is called once with no argument and
+    fails with a TypeError. That is what this runner has always done.
+
+    It is also where the runner diverges from real pytest, which reports an
+    empty parameter set as a skip rather than a failure. Aligning that would
+    change a result category, so it is deliberately left alone and recorded
+    here instead. What matters for the accounting is that the case is still
+    declared, still invoked, and still accounted for -- nothing disappears.
+    """
+    code, out, err = _run_runner(
+        tmp_path, ("test_empty.py", EMPTY_ONE_SHOT_FILE)
+    )
+
+    assert "1 case(s) across 1 function(s)" in out, out
+    assert _summary_line(out, "invoked") == 1, out
+    assert _summary_line(out, "verified") == 0, out
+    assert _summary_line(out, "failed") == 1, out
+    assert "Accounting: declared 1 = invoked 1 + not invoked 0 + blocked 0" in out, out
+    assert "invoked 1 = verified 0 + failed 1 + skipped 0 + not-run 0" in out, out
+    assert "!! the totals above do not add up" not in out, out
+    assert "RESULT: FAILED" in out, out
+    assert code == 1, (code, out, err)

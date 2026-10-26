@@ -51,9 +51,8 @@ def test_settings_initial_state_reflects_startup_manager():
         mock_startup.enable.assert_not_called()
         mock_startup.disable.assert_not_called()
         assert settings_win._startup_checkbox.isChecked() is True
-    except (ImportError, Exception):
-        # Headless testing
-        pass
+    except ImportError:
+        pytest.skip("PySide6 is not available; the Settings window cannot be built")
 
 
 def test_settings_toggle_enable():
@@ -75,8 +74,8 @@ def test_settings_toggle_enable():
         settings_win._startup_checkbox.setChecked(True)
         mock_startup.enable.assert_called_once()
         assert settings_win._startup_checkbox.isChecked() is True
-    except (ImportError, Exception):
-        pass
+    except ImportError:
+        pytest.skip("PySide6 is not available; the Settings window cannot be built")
 
 
 def test_settings_toggle_disable():
@@ -98,8 +97,8 @@ def test_settings_toggle_disable():
         settings_win._startup_checkbox.setChecked(False)
         mock_startup.disable.assert_called_once()
         assert settings_win._startup_checkbox.isChecked() is False
-    except (ImportError, Exception):
-        pass
+    except ImportError:
+        pytest.skip("PySide6 is not available; the Settings window cannot be built")
 
 
 def test_settings_toggle_failure_reverts_state():
@@ -129,8 +128,8 @@ def test_settings_toggle_failure_reverts_state():
         _, title, text = warnings[0][0][:3]
         assert title == "خطأ في الإعدادات"
         assert "بدء التشغيل" in text
-    except (ImportError, Exception):
-        pass
+    except ImportError:
+        pytest.skip("PySide6 is not available; the Settings window cannot be built")
 
 
 def test_settings_layout_direction_regression():
@@ -146,5 +145,5 @@ def test_settings_layout_direction_regression():
 
         settings_win = SettingsWindow(startup_manager=mock_startup)
         assert settings_win.layoutDirection() == Qt.LayoutDirection.RightToLeft
-    except (ImportError, Exception):
-        pass
+    except ImportError:
+        pytest.skip("PySide6 is not available; the Settings window cannot be built")

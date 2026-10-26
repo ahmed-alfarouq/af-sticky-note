@@ -83,6 +83,15 @@ def test_offscreen_geometry_falls_back_safely():
     settings = MockSettings()
     mgr = WindowGeometryManager(settings)
 
+    # is_geometry_visible() cannot answer without a QGuiApplication: it returns
+    # True unconditionally when Qt is absent (see its headless fallback). Skip
+    # rather than assert something the implementation cannot express here.
+    # The guard is module-qualified because this file deliberately imports no
+    # Qt of its own -- it is meant to run without PySide6.
+    from app.ui import geometry_manager as _gm
+    if _gm.QGuiApplication is None:
+        pytest.skip("PySide6 is not available; screen visibility cannot be evaluated")
+
     # Coordinates far off in negative space
     is_vis = mgr.is_geometry_visible(-50000, -50000, 380, 560)
-    assert not is_vis or True  # Safe on headless
+    assert not is_vis

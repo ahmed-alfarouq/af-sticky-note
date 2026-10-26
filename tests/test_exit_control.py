@@ -129,8 +129,8 @@ def test_main_window_header_action_buttons_exist_and_wired():
 
         # Verify layout direction is RightToLeft (anchoring buttons to the right side in RTL)
         assert window._header_frame.layoutDirection() == Qt.LayoutDirection.RightToLeft
-    except (ImportError, Exception):
-        pass
+    except ImportError:
+        pytest.skip("PySide6 is not available; MainWindow cannot be built")
 
 
 def test_main_window_exit_control_invokes_shared_shutdown():
@@ -163,6 +163,5 @@ def test_main_window_exit_control_invokes_shared_shutdown():
         window._on_exit_clicked()
         mock_exit_cb.assert_called_once()
         assert window._allow_window_close is True
-    except (ImportError, Exception):
-        # Graceful pass in headless environments where PySide6 is not present
-        pass
+    except ImportError:
+        pytest.skip("PySide6 is not available; MainWindow cannot be built")

@@ -169,7 +169,7 @@ class TaskItem(QFrame):
         # Explicit API mirror of the QSS qproperty-alignment rule: QLabel
         # text anchoring is an alignment property, not a layout-direction
         # effect, and must not depend on stylesheet parsing alone.
-        self._text_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._text_label.setAlignment(Qt.AlignmentFlag.AlignTrailing | Qt.AlignmentFlag.AlignVCenter)
         self._text_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._text_label.setToolTip(task.text)
         # The title is a tab stop (v3 §11): Enter/F2 or double-click starts
@@ -423,7 +423,7 @@ class TaskItem(QFrame):
         field.setText(self._task.text)
         field.setMaxLength(200)
         field.setFixedHeight(26)
-        field.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        field.setAlignment(Qt.AlignmentFlag.AlignTrailing | Qt.AlignmentFlag.AlignVCenter)
         glow = QGraphicsDropShadowEffect(field)
         glow.setColor(QColor(79, 124, 172, 64))
         glow.setBlurRadius(6)

@@ -36,7 +36,7 @@ class DateHeaderWidget(QFrame):
 
         self._day_number = QLabel(self)
         self._day_number.setObjectName("dayNumber")
-        self._day_number.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._day_number.setAlignment(Qt.AlignmentFlag.AlignTrailing | Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(self._day_number)
 
         stack = QVBoxLayout()
@@ -44,18 +44,18 @@ class DateHeaderWidget(QFrame):
         stack.setSpacing(1)
         self._weekday_label = QLabel(self)
         self._weekday_label.setObjectName("weekdayLabel")
-        self._weekday_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._weekday_label.setAlignment(Qt.AlignmentFlag.AlignTrailing | Qt.AlignmentFlag.AlignVCenter)
         # Hijri line (top) — soft-blue emphasis.
         self._hijri_label = QLabel(self)
         self._hijri_label.setObjectName("hijriDateLabel")
-        self._hijri_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._hijri_label.setAlignment(Qt.AlignmentFlag.AlignTrailing | Qt.AlignmentFlag.AlignVCenter)
         self._hijri_label.setWordWrap(True)
         stack.addWidget(self._weekday_label)
         stack.addWidget(self._hijri_label)
         # Gregorian line (bottom) — quieter secondary text.
         self._gregorian_label = QLabel(self)
         self._gregorian_label.setObjectName("gregorianDateLabel")
-        self._gregorian_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._gregorian_label.setAlignment(Qt.AlignmentFlag.AlignTrailing | Qt.AlignmentFlag.AlignVCenter)
         self._gregorian_label.setWordWrap(True)
         stack.addWidget(self._gregorian_label)
         # Compatibility alias: frozen UI tests read the combined secondary

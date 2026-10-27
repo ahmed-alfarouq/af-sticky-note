@@ -71,7 +71,11 @@ class TaskList(QScrollArea):
         self._completed_expanded = True
         # Empty/all-done states (v3 §7.1): one centered block, shown only
         # when there is nothing to act on. Presentation only: no records,
-        # no signals, never focusable.
+        # no signals, never focusable. Only the empty-day state remains; the
+        # all-done variant was removed because a day whose tasks are all
+        # finished is not an empty state -- the completed rows and their group
+        # header already say so, and the block only duplicated that while
+        # pushing the completed section down the list.
         self._empty_block = QWidget(self._container)
         self._empty_layout = QVBoxLayout(self._empty_block)
         self._empty_layout.setContentsMargins(24, 24, 24, 24)
@@ -166,16 +170,11 @@ class TaskList(QScrollArea):
         widgets = [item for item in ordered if not item._task.is_completed]
         completed = [item for item in ordered if item._task.is_completed]
         show_empty = not ordered
-        show_all_done = bool(ordered) and not widgets
         if show_empty:
             self._empty_title.setText("يومك فارغ")
             self._empty_body.setText("ابدأ بمهمة واحدة، ثم اضغط Enter لإضافة التالية.")
             widgets.append(self._empty_block)
-        elif show_all_done:
-            self._empty_title.setText("أنجزت كل مهام اليوم")
-            self._empty_body.setText("أضف مهمة جديدة أو استمتع بالراحة.")
-            widgets.append(self._empty_block)
-        self._empty_block.setVisible(show_empty or show_all_done)
+        self._empty_block.setVisible(show_empty)
         if completed:
             self._section_label.setText(f"مكتملة • {len(completed)}")
             self._section_label.setIcon(

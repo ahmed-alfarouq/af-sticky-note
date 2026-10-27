@@ -187,7 +187,11 @@ def test_toggle_delete_and_clear_reflow_without_gaps():
 
 
 def test_empty_and_all_done_states(db_connection):
-    """v3 §7.1: exact strings, placement, and transitions of both states."""
+    """v3 §7.1: the empty-day state's strings, placement, and transitions.
+
+    The all-done state was removed, so the fully-finished case is asserted to
+    show no empty block and to rely on the completed group header instead.
+    """
     if _skip_without_qt():
         return
     _qt_app()
@@ -212,14 +216,12 @@ def test_empty_and_all_done_states(db_connection):
         service.toggle_task_completion(done.id, True)
         task_list.set_tasks(service.get_today_tasks(day.id))
         QApplication.instance().processEvents()
-        assert not task_list._empty_block.isHidden()
-        assert task_list._empty_title.text() == "أنجزت كل مهام اليوم"
-        assert task_list._empty_body.text() == "أضف مهمة جديدة أو استمتع بالراحة."
+        # The all-done message was removed: a fully finished day is not an
+        # empty state. The block stays hidden, and the completed group header
+        # is what announces the finished work.
+        assert task_list._empty_block.isHidden()
         assert not task_list._section_label.isHidden()
-        # All-done block sits above the completed group.
-        layout = task_list._layout
-        order = [layout.itemAt(i).widget() for i in range(layout.count())]
-        assert order.index(task_list._empty_block) < order.index(task_list._section_label)
+        assert "مكتملة" in task_list._section_label.text()
 
         todo = service.create_task(day.id, "نشطة")
         assert todo is not None

@@ -166,7 +166,6 @@ def get_application_stylesheet() -> str:
         color: {COLOR_TEXT_PRIMARY};
         font-size: 20px;
         font-weight: bold;
-        background: transparent;
     }}
 
     QLabel#gregorianDateLabel {{

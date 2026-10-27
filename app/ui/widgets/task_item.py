@@ -166,10 +166,13 @@ class TaskItem(QFrame):
 
         self._text_label = _TaskTextLabel(to_display_text(task.text), self)
         self._text_label.setWordWrap(True)
-        # Explicit API mirror of the QSS qproperty-alignment rule: QLabel
-        # text anchoring is an alignment property, not a layout-direction
-        # effect, and must not depend on stylesheet parsing alone.
-        self._text_label.setAlignment(Qt.AlignmentFlag.AlignTrailing | Qt.AlignmentFlag.AlignVCenter)
+        # No explicit horizontal alignment: under the app-level RightToLeft
+        # direction a QLabel's default already anchors text to the right
+        # edge, whereas any explicit AlignRight/AlignTrailing (0x0002)
+        # mirrors it onto the left edge -- the defect the date header fixed
+        # by deleting its setAlignment calls.  The #taskTextLabel QSS rule
+        # still governs while the stylesheet parses; this call only
+        # duplicated that value and corrupted the no-stylesheet fallback.
         self._text_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._text_label.setToolTip(task.text)
         # The title is a tab stop (v3 §11): Enter/F2 or double-click starts

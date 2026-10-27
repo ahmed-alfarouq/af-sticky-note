@@ -58,9 +58,8 @@ def test_hero_shows_hijri_hierarchy(db_connection):
     header = DateHeaderWidget("2026-10-08")
     try:
         assert header._day_number.text() == "26"  # Hijri numeral dominates
-        assert header._weekday_label.text() == "الخميس"
         assert header._hijri_label.text() == "ربيع الآخر 1448 هـ"
-        assert header._gregorian_label.text() == "أكتوبر 2026"
+        assert header._gregorian_label.text() == "الخميس · 8 أكتوبر 2026"
     finally:
         header.close()
 

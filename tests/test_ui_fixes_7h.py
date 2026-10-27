@@ -235,7 +235,8 @@ def test_empty_and_all_done_states(db_connection):
 
 # ------------------------------------------------------------ Issue 3: date header
 
-def test_date_header_three_line_hierarchy_and_geometry():
+def test_date_header_hero_row_and_gregorian_row_geometry():
+    """Hero row (day number, Hijri month/year, ring) over a full-width row."""
     if _skip_without_qt():
         return
     _qt_app()
@@ -243,20 +244,21 @@ def test_date_header_three_line_hierarchy_and_geometry():
 
     header = DateHeaderWidget("2026-10-10")  # Saturday
     header.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-    header.resize(340, 80)
+    # Narrow width, but tall enough that the layout is not vertically
+    # compressed, so the geometry assertions below stay meaningful.
+    header.resize(340, 140)
     header.show()
     QApplication.instance().processEvents()
     try:
         assert header._day_number.text() == "28"
-        assert header._weekday_label.text() == "السبت"
         assert "هـ" in header._hijri_label.text()
-        assert header._gregorian_label.text() == "أكتوبر 2026"
+        assert header._gregorian_label.text() == "السبت · 10 أكتوبر 2026"
         # Physical RTL order: day number rightmost, ring leftmost.
-        assert header._day_number.x() > header._weekday_label.x()
-        assert header._ring.x() < header._weekday_label.x()
-        # Required vertical order: weekday, Hijri, Gregorian.
-        assert header._weekday_label.y() < header._hijri_label.y()
-        assert header._hijri_label.y() < header._gregorian_label.y()
+        assert header._day_number.x() > header._hijri_label.x()
+        assert header._ring.x() < header._hijri_label.x()
+        # Gregorian row sits beneath the hero row and spans the width.
+        assert header._gregorian_label.y() > header._day_number.y()
+        assert header._gregorian_label.width() > header._hijri_label.width()
     finally:
         header.close()
 

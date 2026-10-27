@@ -92,7 +92,7 @@ def test_date_header_shows_hierarchy(db_connection):
     header = DateHeaderWidget("2026-10-08")
     header.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
     assert header._day_number.text() == "26"
-    assert header._weekday_label.text() == "الخميس"
+    assert header._gregorian_label.text() == "الخميس · 8 أكتوبر 2026"
     assert "أكتوبر 2026" in header._secondary_label.text()
     assert "هـ" in header._secondary_label.text()
     assert header._day_number.objectName() == "dayNumber"

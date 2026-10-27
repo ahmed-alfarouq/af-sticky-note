@@ -146,9 +146,10 @@ def get_application_stylesheet() -> str:
         border-radius: 10px;
     }}
 
-    /* Date header block (Phase 7D): one coherent visual unit. The day
-    number dominates; weekday and the secondary Gregorian/Hijri line step
-    down in size and emphasis. All sizes are integers (see note above). */
+    /* Date header block (Phase 7D): one coherent visual unit. The Hijri day
+    number dominates the hero row, the Hijri month/year steps down beside it,
+    and the Gregorian row closes the block. All sizes are integers (see note
+    above). */
     QFrame#dateHeader {{
         background-color: transparent;
         border: none;
@@ -156,28 +157,21 @@ def get_application_stylesheet() -> str:
 
     QLabel#dayNumber {{
         color: {COLOR_TEXT_PRIMARY};
-        font-size: 56px;
+        font-size: 72px;
         font-weight: bold;
-        background: transparent;
-    }}
-
-    QLabel#weekdayLabel {{
-        color: {COLOR_SOFT};
-        font-size: 14px;
-        font-weight: normal;
         background: transparent;
     }}
 
     QLabel#hijriDateLabel {{
         color: {COLOR_TEXT_PRIMARY};
-        font-size: 16px;
+        font-size: 20px;
         font-weight: bold;
         background: transparent;
     }}
 
     QLabel#gregorianDateLabel {{
         color: {COLOR_TEXT_SECONDARY};
-        font-size: 14px;
+        font-size: 15px;
         font-weight: normal;
         background: transparent;
     }}

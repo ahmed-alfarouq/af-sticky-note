@@ -17,6 +17,8 @@ Implements the project constitution palette:
 from __future__ import annotations
 
 from app.infrastructure.fonts import get_default_font_family
+from app.ui.styles.task_item_style import get_task_item_stylesheet
+from app.ui.styles.task_list_style import get_task_list_stylesheet
 from app.ui import theme
 
 # Palette tokens: names matching the v3 spec are aliases of app.ui.theme
@@ -203,18 +205,6 @@ def get_application_stylesheet() -> str:
         background: transparent;
     }}
 
-    /* Completed-group header button (v3 §7.7): collapsible, session-only. */
-    QPushButton#completedGroupHeader {{
-        color: {COLOR_TEXT_SECONDARY};
-        font-size: 12px;
-        font-weight: bold;
-        background: transparent;
-        border: none;
-        border-radius: 8px;
-        padding: 0px 12px;
-        text-align: right;
-    }}
-
     /* Empty-day and all-done states (v3 §7.1). */
     QLabel#emptyStateTitle {{
         color: {COLOR_TEXT_PRIMARY};
@@ -227,102 +217,6 @@ def get_application_stylesheet() -> str:
         color: {COLOR_TEXT_SECONDARY};
         font-size: 14px;
         background: transparent;
-    }}
-
-    QPushButton#completedGroupHeader:hover {{
-        background-color: {COLOR_SURFACE};
-    }}
-
-    QPushButton#completedGroupHeader:focus {{
-        border: 2px solid {COLOR_SOFT};
-        border-radius: 8px;
-    }}
-
-    /* Inline title edit field (v3 §7.4). */
-    QLineEdit#taskTitleEdit {{
-        background-color: {COLOR_BACKGROUND};
-        color: {COLOR_TEXT_PRIMARY};
-        font-size: 16px;
-        border: 1px solid {COLOR_TRUST};
-        border-radius: 8px;
-        padding: 0px 8px;
-    }}
-
-    QLineEdit#taskTitleEdit:focus {{
-        border: 2px solid {COLOR_SOFT};
-        border-radius: 8px;
-    }}
-
-    QLabel#taskTextLabel:focus {{
-        border: 2px solid {COLOR_SOFT};
-        border-radius: 4px;
-    }}
-
-    QLabel#taskTextLabelCompleted:focus {{
-        border: 2px solid {COLOR_SOFT};
-        border-radius: 4px;
-    }}
-
-    /* Hover-revealed row delete control (v3 §7.6). */
-    QToolButton#rowDeleteButton {{
-        background-color: transparent;
-        border: none;
-        border-radius: 8px;
-    }}
-
-    QToolButton#rowDeleteButton:hover {{
-        background-color: #1c2533;
-    }}
-
-    QToolButton#rowDeleteButton:focus {{
-        border: 2px solid {COLOR_SOFT};
-        border-radius: 8px;
-    }}
-
-    /* Task List Scroll Area */
-    QScrollArea#taskListScroll {{
-        background-color: transparent;
-        border: none;
-    }}
-
-    QWidget#taskListContainer {{
-        background-color: transparent;
-    }}
-
-    /* Individual Task Row Frame */
-    QFrame#taskItemFrame {{
-        background-color: {COLOR_CARD_SURFACE};
-        border: 1px solid {COLOR_CARD_BORDER};
-        border-radius: 8px;
-        margin-top: 1px;
-        margin-bottom: 1px;
-        text-align: right;
-    }}
-
-    QFrame#taskItemFrame:hover {{
-        border: 1px solid #334259;
-        background-color: #1A2332;
-    }}
-
-    QLabel#taskTextLabel {{
-        /* Keep this value quoted: an unquoted pipe makes Qt's QSS parser
-           discard this entire stylesheet (tests/test_app_stylesheet.py). */
-        qproperty-alignment: 'AlignRight | AlignVCenter';
-        color: {COLOR_TEXT_PRIMARY};
-        font-size: 16px;
-        font-weight: normal;
-        line-height: 1.4;
-    }}
-
-    QLabel#taskTextLabelCompleted {{
-        /* Keep this value quoted: an unquoted pipe makes Qt's QSS parser
-           discard this entire stylesheet (tests/test_app_stylesheet.py). */
-        qproperty-alignment: 'AlignRight | AlignVCenter';
-        color: {COLOR_TEXT_COMPLETED};
-        font-size: 16px;
-        font-weight: normal;
-        text-decoration: line-through;
-        line-height: 1.4;
     }}
 
     /* Priority Badges */
@@ -344,44 +238,6 @@ def get_application_stylesheet() -> str:
         font-size: 11px;
         font-weight: 600;
         padding: 2px 6px;
-    }}
-
-    /* Task-row metadata (Phase 7C): icon-only, secondary to the text.
-    The row is: [completion] [expanding text] [category icon] [priority dot]
-    in RTL order. Both indicators live in fixed-size boxes set in code so
-    rows never resize between priorities, categories, or states. */
-    QLabel#taskCategoryIcon {{
-        background-color: transparent;
-        border: none;
-    }}
-
-    /* Priority dots (approved R-rows-c mapping): HIGH is a solid
-    amber-red dot, LOW a hollow amber ring, MEDIUM paints nothing (the
-    fixed 12px box is kept so rows never shift). Completed rows mute every
-    dot to the quiet gray. */
-    QLabel#priorityDotHigh {{
-        background-color: {COLOR_URGENT};
-        border-radius: 6px;
-    }}
-
-    QLabel#priorityDotMedium {{
-        background-color: transparent;
-        border: none;
-    }}
-
-    QLabel#priorityDotLow {{
-        background-color: transparent;
-        border: 2px solid {COLOR_WARNING_PIN};
-        border-radius: 6px;
-    }}
-
-    /* Completed rows mute every dot to the quiet gray. */
-    QLabel#priorityDotHigh[completed="true"],
-    QLabel#priorityDotMedium[completed="true"],
-    QLabel#priorityDotLow[completed="true"] {{
-        background-color: {COLOR_TEXT_COMPLETED};
-        border: none;
-        border-radius: 6px;
     }}
 
     /* Priority Selector (new-task row + edit dialog).
@@ -680,29 +536,6 @@ def get_application_stylesheet() -> str:
 
     QCheckBox::indicator:checked:focus {{
         border: 2px solid {COLOR_FOCUS_RING};
-    }}
-
-    /* Task-row completion control (Issue 7): the native indicator box is
-    collapsed to zero and the real 16px asset is shown as the button icon
-    instead (see TaskItem). The border therefore cannot change color on
-    check; only keyboard focus draws a ring. Other checkboxes (settings)
-    keep the standard indicator styling above. */
-    QCheckBox#taskCheckBox {{
-        spacing: 0px;
-        padding-left: 8px;
-    }}
-
-    QCheckBox#taskCheckBox::indicator {{
-        width: 0px;
-        height: 0px;
-        border: none;
-        background: transparent;
-        image: none;
-    }}
-
-    QCheckBox#taskCheckBox:focus {{
-        border: 2px solid {COLOR_SOFT};
-        border-radius: 8px;
     }}
 
     /* Task Input Field */
@@ -1110,5 +943,7 @@ def get_application_stylesheet() -> str:
         font-size: 13px;
         font-weight: 500;
     }}
+    
+    {get_task_item_stylesheet()}
+    {get_task_list_stylesheet()}
     """
-

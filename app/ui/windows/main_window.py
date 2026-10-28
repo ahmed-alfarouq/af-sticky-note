@@ -622,18 +622,17 @@ class MainWindow(QMainWindow):
     def _reload_tasks(self) -> None:
         """Reload today's rows from the service and refresh the ring."""
         if self._day.id is None:
-            logger.error("Cannot reload tasks: day.id is None")
+            logger.warning("Cannot reload tasks: day.id is None")
             return
+
         self._task_list.set_tasks(self._task_service.get_today_tasks(self._day.id))
         self._refresh_progress()
 
-    def _task_item(self, task_id: int):
-        """Return the on-screen row for ``task_id``, if any.
-
-        Single access point to TaskList's private row map; ideally replaced
-        by a public ``TaskList.item_for(task_id)``.
-        """
-        return self._task_list._items.get(task_id)
+    def _task_item(self, task_id: int | None):
+        """Return the on-screen row for ``task_id``, if any."""
+        if task_id is None:
+            return None
+        return self._task_list.item_for(task_id)
 
     # -------------------------------------------------------------------------
     # Task input
@@ -720,16 +719,14 @@ class MainWindow(QMainWindow):
             return (task.position, task.id or 0)
 
         toggled = self._task_item(task_id)
-        anchor = order_key(toggled._task) if toggled is not None else None
+        anchor = order_key(toggled.task) if toggled is not None else None
 
         for task in sorted(open_tasks, key=order_key):
             if anchor is not None and order_key(task) < anchor:
                 continue
-            if task.id is None:
-                continue
             target = self._task_item(task.id)
             if target is not None and target.isVisible():
-                target._checkbox.setFocus()
+                target.focus_checkbox()
                 return
 
         self._task_input.setFocus()

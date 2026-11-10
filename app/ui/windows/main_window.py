@@ -66,16 +66,27 @@ from app.ui.category_icons import CategoryIconProvider
 from app.ui.geometry_manager import WindowGeometryManager
 from app.ui.note_shape import NoteShape, build_note_shape
 from app.ui.pin_state import PinStateManager
+from app.ui.priority_presentation import DEFAULT_TASK_PRIORITY
+from app.ui.sheet_presentation import (
+    CATEGORY_SHEET_TITLE,
+    PRIORITY_SHEET_TITLE,
+    SheetOption,
+    category_sheet_options,
+    priority_sheet_options,
+)
 from app.ui.styles.app_style import get_application_stylesheet
 from app.ui.widgets.category_chip import CategoryChip
 from app.ui.widgets.date_header import DateHeaderWidget
 from app.ui.widgets.icon_button import IconButton
+from app.ui.widgets.option_sheet import OptionSheet
 from app.ui.widgets.paper_surface import PaperSurface, shape_to_region
-from app.ui.widgets.priority_selector import PrioritySelector
+from app.ui.widgets.picker_chip import PickerChip
+from app.ui.widgets.priority_chip import PriorityChip
 from app.ui.widgets.progress_ring import ProgressRing
 from app.ui.widgets.quote_widget import QuoteWidget
 from app.ui.widgets.task_input import TaskInput
 from app.ui.widgets.task_list import TaskList
+from app.ui.widgets.task_list.ordering import open_order_key
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +274,7 @@ class MainWindow(QMainWindow):
         paper_layout.addWidget(self._task_list, 1)
 
         paper_layout.addWidget(self._build_input_dock())
+        self._init_option_sheet()
 
         self._init_shadow()
         self._init_shortcuts()
@@ -399,12 +411,23 @@ class MainWindow(QMainWindow):
 
         dock_layout.addWidget(card, 1)
 
-        self._category_selector = CategoryChip(self._categories, parent=dock)
+        self._category_selector = CategoryChip(
+            self._categories, parent=dock, icon_provider=self._icon_provider
+        )
         dock_layout.addWidget(self._category_selector)
-        self._priority_selector = PrioritySelector(parent=dock)
+        self._priority_selector = PriorityChip(parent=dock)
         dock_layout.addWidget(self._priority_selector)
 
         return dock
+
+    def _init_option_sheet(self) -> None:
+        """Bottom sheet shared by the category and priority pickers.
+
+        Created after every other paper child so it stacks on top of them.
+        """
+        self._option_sheet = OptionSheet(self._paper_surface, self._icon_provider)
+        self._category_selector.open_requested.connect(self._open_category_sheet)
+        self._priority_selector.open_requested.connect(self._open_priority_sheet)
 
     def _init_shadow(self) -> None:
         """Create the paper's drop shadow once; only its parameters change."""
@@ -661,13 +684,54 @@ class MainWindow(QMainWindow):
                 self._task_input.clear()
                 # Priority resets to neutral; the category is kept for fast
                 # batch entry.
-                self._priority_selector.set_priority(TaskPriority.MEDIUM)
+                self._priority_selector.set_priority(DEFAULT_TASK_PRIORITY)
                 if created_task.id is not None:
                     self._task_list.ensure_task_visible(created_task.id)
                 self._refresh_progress()
             self._task_input.setFocus()
         except Exception as exc:
             logger.error("Failed to create task %r: %s", raw_text, exc)
+
+    def _open_category_sheet(self) -> None:
+        chip = self._category_selector
+        options = category_sheet_options(chip.categories())
+        if options:
+            self._present_sheet(
+                CATEGORY_SHEET_TITLE,
+                options,
+                chip.selected_category_id(),
+                chip,
+                chip.set_category,
+            )
+
+    def _open_priority_sheet(self) -> None:
+        chip = self._priority_selector
+        self._present_sheet(
+            PRIORITY_SHEET_TITLE,
+            priority_sheet_options(),
+            chip.selected_priority().value,
+            chip,
+            lambda key: chip.set_priority(TaskPriority(key)),
+        )
+
+    def _present_sheet(
+        self,
+        title: str,
+        options: Sequence[SheetOption],
+        selected_key: str,
+        trigger: PickerChip,
+        apply_choice: Callable[[str], None],
+    ) -> None:
+        """Show the shared sheet for ``trigger``; the chip looks pressed meanwhile."""
+        trigger.set_open(True)
+        self._option_sheet.present(
+            title,
+            options,
+            selected_key,
+            on_chosen=apply_choice,
+            on_closed=lambda: trigger.set_open(False),
+            return_focus=trigger,
+        )
 
     def _on_add_button_clicked(self) -> None:
         self._on_task_submitted(self._task_input.text())
@@ -696,10 +760,10 @@ class MainWindow(QMainWindow):
     def _move_focus_after_toggle(self, task_id: int) -> None:
         """Focus the next open task, or the input when none remains.
 
-        "Next" is positional in the stored order, at or after the toggled
-        row: completing a middle task moves to its successor; completing the
-        last open task moves to the add input; uncompleting keeps focus on
-        the row itself. Only visible, live rows are targeted. Focus only:
+        "Next" follows the list's visual order (priority, then position), at
+        or after the toggled row: completing a middle task moves to its
+        successor; completing the last open task moves to the add input;
+        uncompleting keeps focus on the row itself. Only visible, live rows are targeted. Focus only:
         completion, order, and records are untouched.
         """
         if self._day.id is None:
@@ -715,14 +779,11 @@ class MainWindow(QMainWindow):
             logger.error("Failed to resolve focus target after toggle: %s", exc)
             return
 
-        def order_key(task: Task) -> tuple[int, int]:
-            return (task.position, task.id or 0)
-
         toggled = self._task_item(task_id)
-        anchor = order_key(toggled.task) if toggled is not None else None
+        anchor = open_order_key(toggled.task) if toggled is not None else None
 
-        for task in sorted(open_tasks, key=order_key):
-            if anchor is not None and order_key(task) < anchor:
+        for task in sorted(open_tasks, key=open_order_key):
+            if anchor is not None and open_order_key(task) < anchor:
                 continue
             target = self._task_item(task.id)
             if target is not None and target.isVisible():
@@ -741,7 +802,7 @@ class MainWindow(QMainWindow):
         try:
             item = self._task_item(task_id)
             current_text = item.task_text if item else ""
-            current_priority = item.priority if item else TaskPriority.MEDIUM
+            current_priority = item.priority if item else DEFAULT_TASK_PRIORITY
             current_category = item.category_id if item else DEFAULT_CATEGORY_ID
 
             from app.ui.widgets.task_edit_dialog import TaskEditDialog

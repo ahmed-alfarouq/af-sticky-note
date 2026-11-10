@@ -13,7 +13,7 @@ separated by ``LIST_ITEM_SPACING``. The add bar lives outside this widget.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QContextMenuEvent
@@ -170,9 +170,11 @@ class TaskList(QScrollArea):
             item.update_task_text(new_text)
 
     def update_task_priority(self, task_id: int, priority: TaskPriority) -> None:
+        """Update a row's priority and move it to its new place in the order."""
         item = self.item_for(task_id)
         if item is not None:
             item.update_task_priority(priority)
+            self._relayout()
 
     def update_task_category(self, task_id: int, category_id: str) -> None:
         item = self.item_for(task_id)
@@ -299,16 +301,16 @@ class TaskList(QScrollArea):
         """List menu: dashboard, history, settings, clear completed."""
         menu = QMenu(self)
 
-        def add(text: str, signal: Signal) -> None:
+        def add(text: str, on_triggered: Callable[[], None]) -> None:
             action = QAction(text, menu)
-            action.triggered.connect(signal.emit)
+            action.triggered.connect(on_triggered)
             menu.addAction(action)
 
-        add("لوحة التقارير الأسبوعية", self.dashboard_requested)
-        add("فتح السجل", self.history_requested)
-        add("الإعدادات", self.settings_requested)
+        add("لوحة التقارير الأسبوعية", self.dashboard_requested.emit)
+        add("فتح السجل", self.history_requested.emit)
+        add("الإعدادات", self.settings_requested.emit)
         menu.addSeparator()
-        add("حذف المهام المكتملة", self.clear_completed_requested)
+        add("حذف المهام المكتملة", self.clear_completed_requested.emit)
 
         menu.exec(event.globalPos())
         event.accept()

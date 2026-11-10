@@ -9,25 +9,20 @@ from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
 
 from app.core.models import TaskPriority
-from app.ui.priority_presentation import PRIORITY_LABELS
+from app.ui.priority_presentation import (
+    DEFAULT_TASK_PRIORITY,
+    PRIORITY_COLORS,
+    PRIORITY_LABELS,
+)
 from app.ui.styles.task_item_style import (
     META_DOT_GAP,
     META_DOT_SIZE,
     META_PX,
-    PRIORITY_LOW_COLOR,
-    PRIORITY_NORMAL_COLOR,
-    PRIORITY_URGENT_COLOR,
     repolish,
 )
 from app.ui.widgets.task_item.elided_label import ElidedLabel
 
 __all__ = ["TaskMetaLine"]
-
-PRIORITY_DOT_COLORS = {
-    TaskPriority.HIGH: PRIORITY_URGENT_COLOR,
-    TaskPriority.MEDIUM: PRIORITY_NORMAL_COLOR,
-    TaskPriority.LOW: PRIORITY_LOW_COLOR,
-}
 
 UNFINISHED_TEXT = "لم تكتمل"
 
@@ -37,7 +32,7 @@ class _PriorityDot(QWidget):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self._color = QColor(PRIORITY_NORMAL_COLOR)
+        self._color = QColor(PRIORITY_COLORS[DEFAULT_TASK_PRIORITY])
         self.setFixedSize(QSize(META_DOT_SIZE, META_DOT_SIZE))
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
@@ -78,7 +73,7 @@ class TaskMetaLine(QWidget):
 
     def show_priority(self, priority: TaskPriority, category_name: str) -> None:
         """Open row: colored dot + "priority · category"."""
-        self._dot.set_color(PRIORITY_DOT_COLORS[priority])
+        self._dot.set_color(PRIORITY_COLORS[priority])
         self._dot.setVisible(True)
         label = PRIORITY_LABELS[priority]
         self._set_text(f"{label} · {category_name}", warning=False)

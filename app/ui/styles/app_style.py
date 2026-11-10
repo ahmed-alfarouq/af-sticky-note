@@ -17,6 +17,7 @@ Implements the project constitution palette:
 from __future__ import annotations
 
 from app.infrastructure.fonts import get_default_font_family
+from app.ui.styles.option_sheet_style import get_option_sheet_stylesheet
 from app.ui.styles.task_item_style import get_task_item_stylesheet
 from app.ui.styles.task_list_style import get_task_list_stylesheet
 from app.ui import theme
@@ -358,66 +359,6 @@ def get_application_stylesheet() -> str:
     QComboBox#categorySelector QAbstractItemView::item:selected {{
         background-color: rgba(79, 124, 172, 0.28);
         color: {COLOR_TEXT_PRIMARY};
-    }}
-
-    /* Dock category chip (v3 §8.2): tag + label + caret, opens the custom
-    dropdown (§9). State backgrounds mirror the chip table; the open/hover
-    states are code-driven properties (see CategoryChip). */
-    QWidget#categoryChip {{
-        background-color: transparent;
-        border: 1px solid {COLOR_BORDER};
-        border-radius: 8px;
-        color: {COLOR_TEXT_PRIMARY};
-        font-size: 14px;
-    }}
-
-    QWidget#categoryChip[hover="true"] {{
-        background-color: {COLOR_SURFACE};
-    }}
-
-    QWidget#categoryChip[open="true"] {{
-        background-color: {COLOR_SURFACE};
-    }}
-
-    QWidget#categoryChip[focused="true"] {{
-        border: 2px solid {COLOR_SOFT};
-        border-radius: 8px;
-    }}
-
-    /* Custom category popup (v3 §9): transparent shadow margin + panel. */
-    QWidget#categoryPopup {{
-        background: transparent;
-        border: none;
-    }}
-
-    QFrame#categoryPopupPanel {{
-        background-color: #1c2533;
-        border: 1px solid {COLOR_BORDER};
-        border-radius: 12px;
-    }}
-
-    QListWidget#categoryPopupList {{
-        background: transparent;
-        border: none;
-        outline: none;
-        color: {COLOR_TEXT_PRIMARY};
-        font-size: 14px;
-    }}
-
-    QListWidget#categoryPopupList::item {{
-        background: transparent;
-        border: none;
-        border-radius: 8px;
-        padding: 0px 12px;
-        color: {COLOR_TEXT_PRIMARY};
-    }}
-
-    QListWidget#categoryPopupList::item:hover {{
-        background-color: {COLOR_BORDER};
-    }}
-
-    QListWidget#categoryPopupList::item:selected {{
-        background-color: {COLOR_BORDER};
     }}
 
     /* Bottom input dock (Phase 7C): one cohesive card holding the priority
@@ -946,4 +887,5 @@ def get_application_stylesheet() -> str:
     
     {get_task_item_stylesheet()}
     {get_task_list_stylesheet()}
+    {get_option_sheet_stylesheet()}
     """

@@ -2,9 +2,9 @@
 
 The database-backed :class:`Category` object is the single source of truth
 for ids, Arabic names, icon keys, and ordering. This module only *formats*
-what it is given (plus deterministic ordering), so adding a future category
-never touches widget code. It deliberately contains no label/icon/order
-tables; see ``TaskService``/``CategoryService`` for validation.
+what it is given (plus deterministic ordering); it deliberately contains no
+label/icon/order tables. See ``TaskService``/``CategoryService`` for
+validation.
 """
 from __future__ import annotations
 

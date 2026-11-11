@@ -44,7 +44,7 @@ _ACTIVATE_KEYS = (Qt.Key.Key_Return, Qt.Key.Key_Enter)
 class IconSource(Protocol):
     """Anything that resolves an icon key to an icon (e.g. the category icons)."""
 
-    def icon_for_key(self, key: str) -> QIcon: ...
+    def icon_for_key(self, icon_key: str) -> QIcon: ...
 
 
 class _IconMarker(QLabel):
@@ -103,6 +103,7 @@ class OptionButton(QAbstractButton):
         self._key = option.key
         self._selected = selected
 
+        self._row = QHBoxLayout(self)
         self.setObjectName("optionButton")
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -123,7 +124,7 @@ class OptionButton(QAbstractButton):
     # -- Construction -------------------------------------------------------
 
     def _build(self, option: SheetOption, icon_source: IconSource) -> None:
-        layout = QHBoxLayout(self)
+        layout = self._row
         layout.setContentsMargins(OPTION_PAD_H, 0, OPTION_PAD_H, 0)
         layout.setSpacing(OPTION_GAP)
 
@@ -168,11 +169,11 @@ class OptionButton(QAbstractButton):
     # -- Sizing (a QAbstractButton ignores its layout, so forward it) -------
 
     def sizeHint(self) -> QSize:  # noqa: N802 - Qt naming
-        hint = self.layout().sizeHint()
+        hint = self._row.sizeHint()
         return QSize(hint.width(), max(hint.height(), OPTION_MIN_HEIGHT))
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt naming
-        hint = self.layout().minimumSize()
+        hint = self._row.minimumSize()
         return QSize(hint.width(), max(hint.height(), OPTION_MIN_HEIGHT))
 
     # -- Keyboard -----------------------------------------------------------
@@ -216,3 +217,4 @@ class OptionButton(QAbstractButton):
         if self._selected:
             return QColor(OPTION_SELECTED_BORDER)
         return None
+    

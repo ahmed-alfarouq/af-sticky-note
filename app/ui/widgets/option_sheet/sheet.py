@@ -83,6 +83,7 @@ class OptionSheet(QWidget):
 
     def _build(self) -> None:
         root = QVBoxLayout(self)
+        self._root_layout = root
         root.setContentsMargins(*(OVERLAY_INSET,) * 4)
         root.setSpacing(0)
         root.addStretch(1)  # keeps the sheet at the bottom
@@ -97,6 +98,7 @@ class OptionSheet(QWidget):
         root.addWidget(self._sheet)
 
         layout = QVBoxLayout(self._sheet)
+        self._sheet_layout = layout
         layout.setContentsMargins(
             SHEET_PAD_SIDE, SHEET_PAD_TOP, SHEET_PAD_SIDE, SHEET_PAD_BOTTOM
         )
@@ -210,7 +212,7 @@ class OptionSheet(QWidget):
 
     def _chrome_height(self) -> int:
         """Height of everything in the sheet except the options."""
-        margins = self._sheet.layout().contentsMargins()
+        margins = self._sheet_layout.contentsMargins()
         fixed = GRABBER_HEIGHT + GRABBER_GAP_BELOW + self._title.sizeHint().height()
         gaps = 3 * SHEET_SPACING  # grabber-spacer, spacer-title, title-options
         return margins.top() + margins.bottom() + fixed + gaps
@@ -295,8 +297,8 @@ class OptionSheet(QWidget):
         self._stop_animation()
         # Force a layout pass so the sheet is at its resting position (a
         # previous close left it below the overlay).
-        self.layout().invalidate()
-        self.layout().activate()
+        self._root_layout.invalidate()
+        self._root_layout.activate()
 
         rest = self._sheet.pos()
         hidden = QPoint(rest.x(), self.height())  # just below the overlay

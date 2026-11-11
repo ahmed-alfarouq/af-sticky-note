@@ -6,6 +6,10 @@ from typing import Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QLineEdit, QWidget
 
+__all__ = ["TaskInput", "PLACEHOLDER_TEXT"]
+
+PLACEHOLDER_TEXT = "اكتب مهمة جديدة..."
+
 
 class TaskInput(QLineEdit):
     """Line edit specialized for adding sticky note tasks."""
@@ -15,19 +19,11 @@ class TaskInput(QLineEdit):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("taskInputField")
-        # Explicit widget API (not only QSS qproperty): QLineEdit text is
-        # anchored by its alignment property (default AlignLeft), while
-        # QWidget layout direction does NOT control text layout (Qt docs).
-        # AlignRight keeps Arabic, English, mixed, and numeric input starting
-        # from the right in this RTL interface; bidi ordering inside each
-        # run is untouched.
-        self.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.setPlaceholderText("اكتب مهمة جديدة…")
+        self.setPlaceholderText(PLACEHOLDER_TEXT)
         self.setAccessibleName("مهمة جديدة")
         self.setAccessibleDescription("اكتب نص المهمة واضغط زر الإدخال لإضافتها")
         self.returnPressed.connect(self._on_return_pressed)
 
     def _on_return_pressed(self) -> None:
-        text = self.text()
-        # Coordinator manages clearing upon confirmed persistence
-        self.task_submitted.emit(text)
+        # The coordinator clears the field only after the task is persisted.
+        self.task_submitted.emit(self.text())

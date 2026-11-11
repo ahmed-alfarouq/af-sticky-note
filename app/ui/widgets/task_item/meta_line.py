@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QColor, QPainter
-from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QHBoxLayout, QWidget
 
 from app.core.models import TaskPriority
 from app.ui.priority_presentation import (
@@ -16,39 +15,15 @@ from app.ui.priority_presentation import (
 )
 from app.ui.styles.task_item_style import (
     META_DOT_GAP,
-    META_DOT_SIZE,
     META_PX,
     repolish,
 )
+from app.ui.widgets.priority_dot import PriorityDot
 from app.ui.widgets.task_item.elided_label import ElidedLabel
 
 __all__ = ["TaskMetaLine"]
 
 UNFINISHED_TEXT = "لم تكتمل"
-
-
-class _PriorityDot(QWidget):
-    """Filled circle painted directly (no QSS), fixed at 8 px."""
-
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__(parent)
-        self._color = QColor(PRIORITY_COLORS[DEFAULT_TASK_PRIORITY])
-        self.setFixedSize(QSize(META_DOT_SIZE, META_DOT_SIZE))
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-
-    def set_color(self, color: str) -> None:
-        self._color = QColor(color)
-        self.update()
-
-    def paintEvent(self, event) -> None:  # noqa: N802 - Qt naming
-        painter = QPainter(self)
-        try:
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(self._color)
-            painter.drawEllipse(self.rect())
-        finally:
-            painter.end()
 
 
 class TaskMetaLine(QWidget):
@@ -58,7 +33,7 @@ class TaskMetaLine(QWidget):
         super().__init__(parent)
         self.setObjectName("taskMeta")
 
-        self._dot = _PriorityDot(self)
+        self._dot = PriorityDot(PRIORITY_COLORS[DEFAULT_TASK_PRIORITY], self)
         self._text = ElidedLabel(parent=self)
         self._text.setObjectName("taskMetaText")
         font = self._text.font()

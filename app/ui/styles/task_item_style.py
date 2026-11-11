@@ -13,7 +13,6 @@ ROW_PADDING_V = 10
 ROW_PADDING_H = 14
 ROW_CONTENT_GAP = 12          # checkbox <-> text block
 META_TOP_GAP = 2              # title <-> meta line
-META_DOT_SIZE = 8
 META_DOT_GAP = 6              # dot <-> meta text
 
 CHECKBOX_SIZE = 28

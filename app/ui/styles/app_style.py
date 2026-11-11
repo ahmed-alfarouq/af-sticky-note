@@ -17,6 +17,7 @@ Implements the project constitution palette:
 from __future__ import annotations
 
 from app.infrastructure.fonts import get_default_font_family
+from app.ui.styles.add_task_bar_style import get_add_task_bar_stylesheet
 from app.ui.styles.option_sheet_style import get_option_sheet_stylesheet
 from app.ui.styles.task_item_style import get_task_item_stylesheet
 from app.ui.styles.task_list_style import get_task_list_stylesheet
@@ -361,84 +362,6 @@ def get_application_stylesheet() -> str:
         color: {COLOR_TEXT_PRIMARY};
     }}
 
-    /* Bottom input dock (Phase 7C): one cohesive card holding the priority
-    selector, category selector, text field, and add button. Children drop
-    their individual card chrome inside the dock only (contextual rules);
-    elsewhere they keep the standalone styling above. */
-    QFrame#taskInputDock {{
-        background-color: {COLOR_CARD_SURFACE};
-        border: 1px solid {COLOR_CARD_BORDER};
-        border-radius: 10px;
-    }}
-
-    /* Bottom input dock (Phase 7H): a transparent wrapper holding the
-    input card plus the two standalone selectors. The card carries the
-    dock chrome; selectors keep compact stock-like styling with a modest
-    gap and no wrapper container. The top divider (v3 §8) separates the
-    dock from the task list. */
-    QFrame#taskInputDock {{
-        background-color: transparent;
-        border: none;
-        border-top: 1px solid {COLOR_BORDER};
-    }}
-
-    QFrame#taskInputCard {{
-        background-color: {COLOR_CARD_SURFACE};
-        border: 1px solid {COLOR_CARD_BORDER};
-        border-radius: 10px;
-    }}
-
-    QFrame#taskInputDock QComboBox#prioritySelector,
-    QFrame#taskInputDock QComboBox#categorySelector {{
-        background-color: {COLOR_INPUT_BG};
-        border: 1px solid {COLOR_CARD_BORDER};
-        border-radius: 6px;
-        min-width: 0px;
-        padding: 2px 6px;
-    }}
-
-    QFrame#taskInputDock QLineEdit#taskInputField {{
-        background-color: transparent;
-        border: none;
-        padding: 6px 4px;
-    }}
-
-    QFrame#taskInputDock QLineEdit#taskInputField:focus {{
-        border: none;
-    }}
-
-    QPushButton#taskAddButton {{
-        background-color: {COLOR_FOCUS_RING};
-        color: #FFFFFF;
-        border: none;
-        border-radius: 11px;
-        font-size: 16px;
-        font-weight: 700;
-        min-width: 22px;
-        max-width: 22px;
-        min-height: 22px;
-        max-height: 22px;
-        padding: 0px;
-    }}
-
-    QPushButton#taskAddButton:hover {{
-        background-color: #5D8DBE;
-    }}
-
-    QPushButton#taskAddButton:pressed {{
-        background-color: #436E9B;
-    }}
-
-    QPushButton#taskAddButton:disabled {{
-        background-color: #283241;
-        color: #6b778a;
-    }}
-
-    QPushButton#taskAddButton:focus {{
-        border: 2px solid {COLOR_SOFT};
-        border-radius: 11px;
-    }}
-
     /* Checkbox Styling with clear accessible states */
     QCheckBox {{
         spacing: 8px;
@@ -477,33 +400,6 @@ def get_application_stylesheet() -> str:
 
     QCheckBox::indicator:checked:focus {{
         border: 2px solid {COLOR_FOCUS_RING};
-    }}
-
-    /* Task Input Field */
-    QLineEdit#taskInputField {{
-        /* Keep this value quoted: an unquoted pipe makes Qt's QSS parser
-           discard this entire stylesheet (tests/test_app_stylesheet.py). */
-        qproperty-alignment: 'AlignRight | AlignVCenter';
-        /* Keep this value an integer number of pixels: Qt's QSS parser
-           silently discards a fractional font-size (13.5px renders at the
-           platform default, ~9pt) and emits no warning at all
-           (tests/test_app_stylesheet.py). The typed task text must not be
-           smaller than the same text once it becomes a task row. */
-        font-size: 13px;
-        background-color: {COLOR_INPUT_BG};
-        color: {COLOR_TEXT_PRIMARY};
-        border: 1.5px solid {COLOR_CARD_BORDER};
-        border-radius: 8px;
-        padding: 9px 14px;
-    }}
-
-    QLineEdit#taskInputField:hover {{
-        border-color: {COLOR_BORDER};
-    }}
-
-    QLineEdit#taskInputField:focus {{
-        border: 2px solid {COLOR_FOCUS_RING};
-        background-color: #151C28;
     }}
 
     /* Common Close & Action Buttons (History & Settings) */
@@ -888,4 +784,5 @@ def get_application_stylesheet() -> str:
     {get_task_item_stylesheet()}
     {get_task_list_stylesheet()}
     {get_option_sheet_stylesheet()}
+    {get_add_task_bar_stylesheet()}
     """

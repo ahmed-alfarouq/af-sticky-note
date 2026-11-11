@@ -47,7 +47,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
-    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -75,16 +74,13 @@ from app.ui.sheet_presentation import (
     priority_sheet_options,
 )
 from app.ui.styles.app_style import get_application_stylesheet
-from app.ui.widgets.category_chip import CategoryChip
+from app.ui.widgets.add_task_bar import AddTaskBar
 from app.ui.widgets.date_header import DateHeaderWidget
 from app.ui.widgets.icon_button import IconButton
 from app.ui.widgets.option_sheet import OptionSheet
 from app.ui.widgets.paper_surface import PaperSurface, shape_to_region
-from app.ui.widgets.picker_chip import PickerChip
-from app.ui.widgets.priority_chip import PriorityChip
 from app.ui.widgets.progress_ring import ProgressRing
 from app.ui.widgets.quote_widget import QuoteWidget
-from app.ui.widgets.task_input import TaskInput
 from app.ui.widgets.task_list import TaskList
 from app.ui.widgets.task_list.ordering import open_order_key
 
@@ -273,7 +269,7 @@ class MainWindow(QMainWindow):
         self._build_task_list(initial_tasks)
         paper_layout.addWidget(self._task_list, 1)
 
-        paper_layout.addWidget(self._build_input_dock())
+        paper_layout.addWidget(self._build_add_bar())
         self._init_option_sheet()
 
         self._init_shadow()
@@ -377,48 +373,12 @@ class MainWindow(QMainWindow):
         self._task_list = task_list
         self._refresh_progress()
 
-    def _build_input_dock(self) -> QFrame:
-        """Bottom dock: input card (text + add) and, on its physical left,
-        the category chip and priority selector (RTL: added after the card).
-        """
-        dock = QFrame(self._paper_surface)
-        dock.setObjectName("taskInputDock")
-        dock_layout = QHBoxLayout(dock)
-        dock_layout.setContentsMargins(0, 0, 0, 0)
-        dock_layout.setSpacing(8)
-
-        card = QFrame(dock)
-        card.setObjectName("taskInputCard")
-        card_layout = QHBoxLayout(card)
-        card_layout.setContentsMargins(6, 4, 6, 4)
-        card_layout.setSpacing(6)
-
-        self._task_input = TaskInput(parent=card)
-        self._task_input.task_submitted.connect(self._on_task_submitted)
-        card_layout.addWidget(self._task_input, 1)
-
-        # Disabled while the input is blank; the Enter path keeps its own
-        # empty-text guard.
-        self._add_btn = QPushButton("+", card)
-        self._add_btn.setObjectName("taskAddButton")
-        self._add_btn.setAccessibleName("إضافة المهمة")
-        self._add_btn.setToolTip("إضافة المهمة")
-        self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._add_btn.setEnabled(False)
-        self._add_btn.clicked.connect(self._on_add_button_clicked)
-        self._task_input.textChanged.connect(self._on_input_text_changed)
-        card_layout.addWidget(self._add_btn)
-
-        dock_layout.addWidget(card, 1)
-
-        self._category_selector = CategoryChip(
-            self._categories, parent=dock, icon_provider=self._icon_provider
-        )
-        dock_layout.addWidget(self._category_selector)
-        self._priority_selector = PriorityChip(parent=dock)
-        dock_layout.addWidget(self._priority_selector)
-
-        return dock
+    def _build_add_bar(self) -> AddTaskBar:
+        """Bottom bar: input row with plus button, then category/priority chips."""
+        bar = AddTaskBar(self._categories, self._icon_provider, self._paper_surface)
+        bar.task_submitted.connect(self._on_task_submitted)
+        self._add_bar = bar
+        return bar
 
     def _init_option_sheet(self) -> None:
         """Bottom sheet shared by the category and priority pickers.
@@ -426,8 +386,8 @@ class MainWindow(QMainWindow):
         Created after every other paper child so it stacks on top of them.
         """
         self._option_sheet = OptionSheet(self._paper_surface, self._icon_provider)
-        self._category_selector.open_requested.connect(self._open_category_sheet)
-        self._priority_selector.open_requested.connect(self._open_priority_sheet)
+        self._add_bar.category_chip.open_requested.connect(self._open_category_sheet)
+        self._add_bar.priority_chip.open_requested.connect(self._open_priority_sheet)
 
     def _init_shadow(self) -> None:
         """Create the paper's drop shadow once; only its parameters change."""
@@ -438,7 +398,7 @@ class MainWindow(QMainWindow):
     def _init_shortcuts(self) -> None:
         """Window-scope shortcuts that never collide with text editing."""
         self._focus_input_shortcut = self._make_shortcut(
-            "Ctrl+N", self._task_input.setFocus
+            "Ctrl+N", self._add_bar.focus_input
         )
         self._toggle_pin_shortcut = self._make_shortcut(
             "Ctrl+Shift+P", self._on_pin_clicked
@@ -451,8 +411,8 @@ class MainWindow(QMainWindow):
         return shortcut
 
     def _rechain_window_tab_order(self) -> None:
-        """Keyboard chain: pin, archive, settings, close, rows, input, add,
-        category chip, priority selector.
+        """Keyboard chain: pin, archive, settings, close, rows, then the add
+        bar (input, plus, category chip, priority chip; ordered by the bar).
 
         Row ends are anchored through the list, which re-links them on every
         relayout, so this runs once at setup.
@@ -460,10 +420,7 @@ class MainWindow(QMainWindow):
         QWidget.setTabOrder(self._pin_btn, self._archive_btn)
         QWidget.setTabOrder(self._archive_btn, self._settings_btn)
         QWidget.setTabOrder(self._settings_btn, self._close_btn)
-        self._task_list.set_chain_anchors(self._close_btn, self._task_input)
-        QWidget.setTabOrder(self._task_input, self._add_btn)
-        QWidget.setTabOrder(self._add_btn, self._category_selector)
-        QWidget.setTabOrder(self._category_selector, self._priority_selector)
+        self._task_list.set_chain_anchors(self._close_btn, self._add_bar.input_field)
 
     # -------------------------------------------------------------------------
     # Organic paper silhouette: shape + window mask lifecycle
@@ -676,24 +633,24 @@ class MainWindow(QMainWindow):
             created_task = self._task_service.create_task(
                 self._day.id,
                 raw_text,
-                priority=self._priority_selector.selected_priority(),
-                category_id=self._category_selector.selected_category_id(),
+                priority=self._add_bar.priority_chip.selected_priority(),
+                category_id=self._add_bar.category_chip.selected_category_id(),
             )
             if created_task is not None:
                 self._task_list.add_task(created_task)
-                self._task_input.clear()
+                self._add_bar.clear()
                 # Priority resets to neutral; the category is kept for fast
                 # batch entry.
-                self._priority_selector.set_priority(DEFAULT_TASK_PRIORITY)
+                self._add_bar.priority_chip.set_priority(DEFAULT_TASK_PRIORITY)
                 if created_task.id is not None:
                     self._task_list.ensure_task_visible(created_task.id)
                 self._refresh_progress()
-            self._task_input.setFocus()
+            self._add_bar.focus_input()
         except Exception as exc:
             logger.error("Failed to create task %r: %s", raw_text, exc)
 
     def _open_category_sheet(self) -> None:
-        chip = self._category_selector
+        chip = self._add_bar.category_chip
         options = category_sheet_options(chip.categories())
         if options:
             self._present_sheet(
@@ -705,7 +662,7 @@ class MainWindow(QMainWindow):
             )
 
     def _open_priority_sheet(self) -> None:
-        chip = self._priority_selector
+        chip = self._add_bar.priority_chip
         self._present_sheet(
             PRIORITY_SHEET_TITLE,
             priority_sheet_options(),
@@ -719,25 +676,17 @@ class MainWindow(QMainWindow):
         title: str,
         options: Sequence[SheetOption],
         selected_key: str,
-        trigger: PickerChip,
+        trigger: QWidget,
         apply_choice: Callable[[str], None],
     ) -> None:
-        """Show the shared sheet for ``trigger``; the chip looks pressed meanwhile."""
-        trigger.set_open(True)
+        """Show the shared sheet; focus returns to ``trigger`` afterwards."""
         self._option_sheet.present(
             title,
             options,
             selected_key,
             on_chosen=apply_choice,
-            on_closed=lambda: trigger.set_open(False),
             return_focus=trigger,
         )
-
-    def _on_add_button_clicked(self) -> None:
-        self._on_task_submitted(self._task_input.text())
-
-    def _on_input_text_changed(self, text: str) -> None:
-        self._add_btn.setEnabled(bool(text.strip()))
 
     # -------------------------------------------------------------------------
     # Task row actions
@@ -790,7 +739,7 @@ class MainWindow(QMainWindow):
                 target.focus_checkbox()
                 return
 
-        self._task_input.setFocus()
+        self._add_bar.focus_input()
 
     def _on_task_edit_requested(self, task_id: int) -> None:
         """Open the edit dialog and persist changed text/category/priority.
@@ -1000,7 +949,7 @@ class MainWindow(QMainWindow):
             action.triggered.connect(slot)
             menu.addAction(action)
 
-        add("إضافة مهمة", self._task_input.setFocus)
+        add("إضافة مهمة", self._add_bar.focus_input)
         add("نقل غير المكتمل", self._on_carry_forward_requested)
         add("إلغاء التثبيت" if self._pinned else "تثبيت", self._on_pin_clicked)
         add("إعدادات", self._on_settings_requested)

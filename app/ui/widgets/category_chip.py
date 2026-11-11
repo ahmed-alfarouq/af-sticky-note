@@ -1,4 +1,4 @@
-"""Dock category chip (category icon + label + caret).
+"""Category chip (category icon + label).
 
 Shows the category chosen for the next task, with that category's icon. The
 chip only holds the selection; the window presents the category sheet when
@@ -11,17 +11,17 @@ from __future__ import annotations
 from typing import List, Optional, Sequence
 
 from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QLabel, QWidget
 
 from app.core.models import DEFAULT_CATEGORY_ID, Category
 from app.ui.category_icons import CategoryIconProvider
 from app.ui.category_presentation import category_label, sort_categories
 from app.ui.icons import icon as vector_icon
+from app.ui.styles.add_task_bar_style import CHIP_ICON_SIZE
 from app.ui.widgets.picker_chip import PickerChip
 
 __all__ = ["CategoryChip"]
 
-_ICON_SIZE = 16
 _FALLBACK_ICON_COLOR = "#98A2B3"
 
 
@@ -39,7 +39,10 @@ class CategoryChip(PickerChip):
         parent: Optional[QWidget] = None,
         icon_provider: Optional[CategoryIconProvider] = None,
     ) -> None:
-        super().__init__("categoryChip", "الفئة", parent)
+        icon = QLabel()
+        icon.setFixedSize(CHIP_ICON_SIZE, CHIP_ICON_SIZE)
+        super().__init__("categoryChip", "الفئة", icon, parent)
+        self._icon = icon
         self._icon_provider = icon_provider
         self._categories: List[Category] = []
         self._selected_id = DEFAULT_CATEGORY_ID
@@ -99,11 +102,13 @@ class CategoryChip(PickerChip):
         label = self.selected_label()
         self._set_text(label)
         self.setToolTip(label)
-        self._set_leading(self._icon_pixmap())
+        self._icon.setPixmap(self._icon_pixmap())
 
     def _icon_pixmap(self) -> QPixmap:
         """The selected category's icon (a generic tag without a provider)."""
         selected = self._find(self.selected_category_id())
         if self._icon_provider is not None and selected is not None:
-            return self._icon_provider.icon_for_category(selected).pixmap(_ICON_SIZE, _ICON_SIZE)
-        return vector_icon("tag", _FALLBACK_ICON_COLOR).pixmap(_ICON_SIZE, _ICON_SIZE)
+            icon = self._icon_provider.icon_for_category(selected)
+        else:
+            icon = vector_icon("tag", _FALLBACK_ICON_COLOR)
+        return icon.pixmap(CHIP_ICON_SIZE, CHIP_ICON_SIZE)

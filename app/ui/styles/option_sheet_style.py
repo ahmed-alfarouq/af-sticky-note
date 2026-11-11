@@ -1,8 +1,6 @@
-"""Design tokens and QSS for the bottom option sheet and the picker chips."""
+"""Design tokens and QSS for the bottom option sheet."""
 
 from __future__ import annotations
-
-from app.ui import theme
 
 __all__ = ["get_option_sheet_stylesheet"]
 
@@ -53,7 +51,7 @@ CHECK_COLOR = "#9fc2f5"
 
 
 def get_option_sheet_stylesheet() -> str:
-    """QSS for the sheet text/frame and for the dock picker chips."""
+    """QSS for the sheet frame and its text."""
     return f"""
     /* Bottom option sheet (category / priority pickers). */
     QWidget#optionSheetOverlay {{
@@ -95,28 +93,5 @@ def get_option_sheet_stylesheet() -> str:
         color: {OPTION_HINT_COLOR};
         font-size: {OPTION_HINT_PX}px;
         background: transparent;
-    }}
-
-    /* Dock picker chips (category, priority): marker + label + caret.
-       Hover / open / focused are code-driven properties (see PickerChip). */
-    QWidget[pickerChip="true"] {{
-        background-color: transparent;
-        border: 1px solid {theme.BORDER};
-        border-radius: 8px;
-        color: {theme.TEXT};
-        font-size: 14px;
-    }}
-
-    QWidget[pickerChip="true"][hover="true"] {{
-        background-color: {theme.SURFACE};
-    }}
-
-    QWidget[pickerChip="true"][open="true"] {{
-        background-color: {theme.SURFACE};
-    }}
-
-    QWidget[pickerChip="true"][focused="true"] {{
-        border: 2px solid {theme.SOFT};
-        border-radius: 8px;
     }}
     """

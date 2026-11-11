@@ -1,4 +1,4 @@
-"""Dock priority chip (colored dot + label + caret).
+"""Priority chip (colored dot + label).
 
 Shows the priority chosen for the next task. Like :class:`CategoryChip`, it
 only holds the selection; the window presents the priority sheet when the
@@ -11,20 +11,24 @@ from typing import Optional
 from PySide6.QtWidgets import QWidget
 
 from app.core.models import TaskPriority
-from app.ui.priority_presentation import DEFAULT_TASK_PRIORITY, priority_label
+from app.ui.priority_presentation import (
+    DEFAULT_TASK_PRIORITY,
+    PRIORITY_COLORS,
+    priority_label,
+)
 from app.ui.widgets.picker_chip import PickerChip
-from app.ui.widgets.priority_selector import priority_dot_icon
+from app.ui.widgets.priority_dot import PriorityDot
 
 __all__ = ["PriorityChip"]
 
-_DOT_SIZE = 12
-
 
 class PriorityChip(PickerChip):
-    """Dot + label + caret button exposing :class:`TaskPriority` values."""
+    """Dot + label button exposing :class:`TaskPriority` values."""
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__("priorityChip", "الأولوية", parent)
+        dot = PriorityDot(PRIORITY_COLORS[DEFAULT_TASK_PRIORITY])
+        super().__init__("priorityChip", "الأولوية", dot, parent)
+        self._dot = dot
         self._priority = DEFAULT_TASK_PRIORITY
         self._refresh()
 
@@ -40,7 +44,7 @@ class PriorityChip(PickerChip):
 
     def _refresh(self) -> None:
         label = priority_label(self._priority)
-        self._set_leading(priority_dot_icon(self._priority).pixmap(_DOT_SIZE, _DOT_SIZE))
+        self._dot.set_color(PRIORITY_COLORS[self._priority])
         self._set_text(label)
         self.setToolTip(label)
         self.setAccessibleName(f"الأولوية: {label}")

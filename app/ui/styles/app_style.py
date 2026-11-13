@@ -19,6 +19,7 @@ from __future__ import annotations
 from app.infrastructure.fonts import get_default_font_family
 from app.ui.styles.add_task_bar_style import get_add_task_bar_stylesheet
 from app.ui.styles.option_sheet_style import get_option_sheet_stylesheet
+from app.ui.styles.settings_style import get_settings_stylesheet
 from app.ui.styles.task_item_style import get_task_item_stylesheet
 from app.ui.styles.task_list_style import get_task_list_stylesheet
 from app.ui import theme
@@ -772,17 +773,9 @@ def get_application_stylesheet() -> str:
         background-color: #141B26;
     }}
 
-    /* Settings window: the startup checkbox text had no rule, so it rendered
-       at the platform default size next to a 13px app title. The indicator
-       itself is already covered by the generic QCheckBox rules above. */
-    QCheckBox#startupCheckbox {{
-        color: {COLOR_TEXT_PRIMARY};
-        font-size: 13px;
-        font-weight: 500;
-    }}
-    
     {get_task_item_stylesheet()}
     {get_task_list_stylesheet()}
     {get_option_sheet_stylesheet()}
     {get_add_task_bar_stylesheet()}
+    {get_settings_stylesheet()}
     """

@@ -81,6 +81,7 @@ from app.ui.widgets.option_sheet import OptionSheet
 from app.ui.widgets.paper_surface import PaperSurface, shape_to_region
 from app.ui.widgets.progress_ring import ProgressRing
 from app.ui.widgets.quote_widget import QuoteWidget
+from app.ui.widgets.settings import SettingsPanel
 from app.ui.widgets.task_list import TaskList
 from app.ui.widgets.task_list.ordering import open_order_key
 
@@ -250,27 +251,38 @@ class MainWindow(QMainWindow):
         # The deeper bottom margin keeps content clear of the organic tears.
         paper_layout = QVBoxLayout(self._paper_surface)
         paper_layout.setContentsMargins(16, 12, 16, self.PAPER_BOTTOM_MARGIN)
-        paper_layout.setSpacing(12)
+        paper_layout.setSpacing(0)
+
+        # The home page holds everything the user sees by default; screens
+        # such as the settings panel slide over it and swap it out.
+        self._home_page = QWidget(self._paper_surface)
+        self._home_page.setObjectName("homePage")
+        paper_layout.addWidget(self._home_page)
+
+        home_layout = QVBoxLayout(self._home_page)
+        home_layout.setContentsMargins(0, 0, 0, 0)
+        home_layout.setSpacing(12)
 
         # 1. Top bar, 2. date, 3. progress ring, 4. quote, 5. tasks, 6. input.
-        paper_layout.addWidget(self._build_header())
+        home_layout.addWidget(self._build_header())
 
         self._date_header = DateHeaderWidget(date_str, parent=self._paper_surface)
-        paper_layout.addWidget(self._date_header)
+        home_layout.addWidget(self._date_header)
 
         self._progress_ring = ProgressRing(parent=self._paper_surface)
-        paper_layout.addWidget(self._progress_ring)
+        home_layout.addWidget(self._progress_ring)
 
         self._quote_widget = QuoteWidget(
             quote_text=quote_text, parent=self._paper_surface
         )
-        paper_layout.addWidget(self._quote_widget)
+        home_layout.addWidget(self._quote_widget)
 
         self._build_task_list(initial_tasks)
-        paper_layout.addWidget(self._task_list, 1)
+        home_layout.addWidget(self._task_list, 1)
 
-        paper_layout.addWidget(self._build_add_bar())
+        home_layout.addWidget(self._build_add_bar())
         self._init_option_sheet()
+        self._init_settings_panel()
 
         self._init_shadow()
         self._init_shortcuts()
@@ -388,6 +400,14 @@ class MainWindow(QMainWindow):
         self._option_sheet = OptionSheet(self._paper_surface, self._icon_provider)
         self._add_bar.category_chip.open_requested.connect(self._open_category_sheet)
         self._add_bar.priority_chip.open_requested.connect(self._open_priority_sheet)
+
+    def _init_settings_panel(self) -> None:
+        """Settings screen that slides over the home page (needs the startup manager)."""
+        self._settings_panel: Optional[SettingsPanel] = (
+            SettingsPanel(self._paper_surface, self._home_page, self._startup_manager)
+            if self._startup_manager is not None
+            else None
+        )
 
     def _init_shadow(self) -> None:
         """Create the paper's drop shadow once; only its parameters change."""
@@ -880,16 +900,11 @@ class MainWindow(QMainWindow):
             logger.error("Failed to open Dashboard window: %s", exc)
 
     def _on_settings_requested(self) -> None:
-        """Open the Settings dialog (fresh dialog per open)."""
-        if self._startup_manager is None:
+        """Slide the settings screen in over the home page."""
+        if self._settings_panel is None:
             logger.warning("StartupManager not configured on MainWindow")
             return
-        try:
-            from app.ui.windows.settings_window import SettingsWindow
-
-            SettingsWindow(startup_manager=self._startup_manager, parent=self).exec()
-        except Exception as exc:
-            logger.error("Failed to open Settings window: %s", exc)
+        self._settings_panel.open(return_focus=self._settings_btn)
 
     def _on_exit_clicked(self) -> None:
         """Trigger canonical application shutdown via the registered path."""

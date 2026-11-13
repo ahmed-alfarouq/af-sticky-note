@@ -30,6 +30,7 @@ GLYPHS = {
     "caret_down": "ph.caret-down-bold",
     "caret_left": "ph.caret-left-bold",
     "plus": "ph.plus-bold",
+    "arrow_right": "ph.arrow-right-bold",
 }
 
 __all__ = ["GLYPHS", "icon"]

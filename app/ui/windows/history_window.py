@@ -51,9 +51,11 @@ class HistoryWindow(QDialog):
         parent: Optional[QWidget] = None,
         categories: Sequence[Category] = (),
         icon_provider: Optional[CategoryIconProvider] = None,
+        hijri_first: bool = False,
     ) -> None:
         super().__init__(parent)
         self._history_service = history_service
+        self._hijri_first = hijri_first
         # Category metadata supplied once per dialog (never per-row queries).
         # Lookup is by stable id with graceful fallback, so rows stay correct
         # even for categories absent from this list (e.g. deactivated after
@@ -180,7 +182,7 @@ class HistoryWindow(QDialog):
 
         # Update Date Titles
         self._date_title_label.setText(date_str)
-        dual_calendar = format_dual_calendar_date(date_str)
+        dual_calendar = format_dual_calendar_date(date_str, hijri_first=self._hijri_first)
         self._dual_date_label.setText(dual_calendar)
 
         # Update Stats

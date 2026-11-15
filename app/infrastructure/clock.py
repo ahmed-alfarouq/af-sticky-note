@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import Tuple
+from typing import Optional, Tuple
 
 ARABIC_GREGORIAN_MONTHS = (
     "يناير",
@@ -199,8 +199,10 @@ def gregorian_to_hijri(year: int, month: int, day: int) -> Tuple[int, int, int]:
     return iy_h, im_h, id_h
 
 
-def format_dual_calendar_date(iso_date: str) -> str:
+def format_dual_calendar_date(iso_date: str, hijri_first: bool = False) -> str:
     """Format an ISO date string (YYYY-MM-DD) into a dual Gregorian & Hijri Arabic date line.
+
+    The Gregorian date leads unless ``hijri_first`` is set.
 
     Example:
         '2026-09-22' -> '22 سبتمبر 2026 • 10 ربيع الآخر 1448 هـ'
@@ -230,10 +232,11 @@ def format_dual_calendar_date(iso_date: str) -> str:
         qdate = QDate(g_year, g_month, g_day)
         if qdate.isValid():
             cal = QCalendar(QCalendar.System.IslamicCivil)
-            if cal.isDateValid(cal.year(qdate), cal.month(qdate), cal.day(qdate)):
-                hijri_year = cal.year(qdate)
-                hijri_month = cal.month(qdate)
-                hijri_day = cal.day(qdate)
+            parts = cal.partsFromDate(qdate)
+            if cal.isDateValid(parts.year, parts.month, parts.day):
+                hijri_year = parts.year
+                hijri_month = parts.month
+                hijri_day = parts.day
     except Exception:
         pass
 
@@ -248,4 +251,6 @@ def format_dual_calendar_date(iso_date: str) -> str:
     )
     hijri_str = f"{hijri_day} {h_month_name} {hijri_year} هـ"
 
+    if hijri_first:
+        return f"{hijri_str}  •  {gregorian_str}"
     return f"{gregorian_str}  •  {hijri_str}"

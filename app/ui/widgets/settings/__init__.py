@@ -1,5 +1,6 @@
-"""The settings screen: a panel that slides over the home page."""
+"""The settings screen: a panel that replaces the home page."""
 
+from app.ui.widgets.settings.context import SettingsContext
 from app.ui.widgets.settings.panel import SettingsPanel
 
-__all__ = ["SettingsPanel"]
+__all__ = ["SettingsContext", "SettingsPanel"]

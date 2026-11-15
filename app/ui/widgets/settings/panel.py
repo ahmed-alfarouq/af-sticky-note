@@ -1,74 +1,39 @@
 """The settings screen.
 
-A panel that slides in over the home page (which fades out beneath it) and
-slides away again on "back". Its sections stagger in as it arrives.
-
-Only the "start with Windows" switch does anything; every other control
-animates and keeps its state while the panel is open, but is not connected to
-any setting yet.
+A screen that replaces the home page: the settings screen slides in from the
+left while the home page slides out to the right, and "back" plays it in
+reverse. Nothing fades. The motion is a snapshot transition (see
+:mod:`transition`), so no live widget is ever moved.
 """
 
 from __future__ import annotations
 
-import logging
-from typing import List, Optional, cast
+from typing import List, Optional
 
-from PySide6.QtCore import QEasingCurve, QEvent, QObject, QParallelAnimationGroup, QPoint, QPropertyAnimation, Qt
+from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPoint, Qt
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import (
-    QFrame,
-    QGraphicsEffect,
-    QGraphicsOpacityEffect,
-    QHBoxLayout,
-    QLabel,
-    QMessageBox,
-    QScrollArea,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
-from app.platform.interfaces import StartupManager
 from app.ui.styles.settings_style import (
     BACK_BUTTON_SIZE,
     BACK_ICON_COLOR,
     BACK_ICON_HOVER,
     BACK_ICON_SIZE,
+    CLOSE_SLIDE_MS,
     NAV_GAP,
-    PANEL_CLOSE_MS,
+    OPEN_SLIDE_MS,
     PANEL_GAP,
     PANEL_MARGINS,
-    PANEL_OPEN_MS,
-    PANEL_SLIDE_OFFSET,
 )
 from app.ui.widgets.icon_button import IconButton
-from app.ui.widgets.settings.reveal import Reveal
-from app.ui.widgets.settings.segmented_control import SegmentedControl
-from app.ui.widgets.settings.settings_rows import SettingsRow, SettingsSection, ValueWithChevron
-from app.ui.widgets.settings.toggle_switch import ToggleSwitch
+from app.ui.widgets.option_sheet import OptionSheet
+from app.ui.widgets.settings.content import SettingsContent
+from app.ui.widgets.settings.context import SettingsContext
+from app.ui.widgets.settings.transition import PageTransition, Sprite
 
 __all__ = ["SettingsPanel"]
 
-logger = logging.getLogger(__name__)
-
-STARTUP_TITLE = "تشغيل مع بدء تشغيل Windows"
-STARTUP_DESCRIPTION = "تشغيل تطبيق الملاحظة اليومية تلقائياً عند تسجيل الدخول إلى Windows"
-
-
-def _switch_row(title: str, on: bool, hint: str = "") -> tuple[SettingsRow, ToggleSwitch]:
-    switch = ToggleSwitch()
-    switch.setAccessibleName(title)
-    switch.set_checked_silently(on, animate=False)
-    return SettingsRow(title, switch, hint), switch
-
-
-def _segment_row(title: str, labels: List[str]) -> SettingsRow:
-    control = SegmentedControl(labels)
-    control.setAccessibleName(title)
-    return SettingsRow(title, control)
-
-
-def _value_row(title: str, value: str) -> SettingsRow:
-    return SettingsRow(title, ValueWithChevron(value))
+_AT_REST = QPoint(0, 0)
 
 
 class SettingsPanel(QWidget):
@@ -78,20 +43,24 @@ class SettingsPanel(QWidget):
         self,
         host: QWidget,
         home: QWidget,
-        startup_manager: StartupManager,
+        option_sheet: OptionSheet,
+        context: SettingsContext,
     ) -> None:
         super().__init__(host)
         self.setObjectName("settingsPanel")
         self.setAccessibleName("الإعدادات")
 
+        self._host = host
         self._home = home
-        self._startup_manager = startup_manager
         self._return_focus: Optional[QWidget] = None
-        self._animation: Optional[QParallelAnimationGroup] = None
+        self._busy = False
+        self._entering = False
+
+        self._content = SettingsContent(context, option_sheet, self)
+        self._transition = PageTransition(host)
+        self._transition.finished.connect(self._on_transition_finished)
 
         self._build()
-        self._reveal = Reveal([self._nav, *self._sections], self)
-
         host.installEventFilter(self)  # keep covering the host when it resizes
         self.hide()
 
@@ -99,32 +68,29 @@ class SettingsPanel(QWidget):
 
     def _build(self) -> None:
         self._nav = self._build_nav()
-        self._startup_switch: ToggleSwitch
-        self._sections = self._build_sections()
 
         content = QWidget()
         content.setObjectName("settingsContent")
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(PANEL_GAP)
-        for section in self._sections:
+        for section in self._content.sections:
             content_layout.addWidget(section)
         content_layout.addStretch(1)
 
-        scroll = QScrollArea(self)
-        scroll.setObjectName("settingsScroll")
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.viewport().setAutoFillBackground(False)
-        scroll.setWidget(content)
+        self._scroll = QScrollArea(self)
+        self._scroll.setObjectName("settingsScroll")
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._scroll.viewport().setAutoFillBackground(False)
+        self._scroll.setWidget(content)
 
-        layout = QVBoxLayout(self)
-        self._layout = layout
-        layout.setContentsMargins(*PANEL_MARGINS)
-        layout.setSpacing(PANEL_GAP)
-        layout.addWidget(self._nav)
-        layout.addWidget(scroll, 1)
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(*PANEL_MARGINS)
+        self._layout.setSpacing(PANEL_GAP)
+        self._layout.addWidget(self._nav)
+        self._layout.addWidget(self._scroll, 1)
 
     def _build_nav(self) -> QWidget:
         nav = QWidget(self)
@@ -153,158 +119,118 @@ class SettingsPanel(QWidget):
         layout.addStretch(1)
         return nav
 
-    def _build_sections(self) -> List[SettingsSection]:
-        startup_row, self._startup_switch = _switch_row(STARTUP_TITLE, on=False)
-        self._startup_switch.setAccessibleDescription(STARTUP_DESCRIPTION)
-        self._startup_switch.toggled.connect(self._on_startup_toggled)
+    # -- Keeping in step with the window ------------------------------------
 
-        return [
-            SettingsSection(
-                "التقويم",
-                [
-                    _segment_row("التقويم الأساسي", ["هجري", "ميلادي"]),
-                    _value_row("أول يوم في الأسبوع", "السبت"),
-                ],
-            ),
-            SettingsSection(
-                "المهام",
-                [
-                    _value_row("التصنيف الافتراضي", "عام"),
-                    _value_row("الأولوية الافتراضية", "عادي"),
-                    _switch_row("أرشفة المكتملة تلقائياً", on=True, hint="بعد يوم واحد")[0],
-                ],
-            ),
-            SettingsSection(
-                "العرض",
-                [
-                    _segment_row("المظهر", ["داكن", "فاتح", "تلقائي"]),
-                    _switch_row("الرسالة اليومية", on=True)[0],
-                    _switch_row("تثبيت النافذة", on=True)[0],
-                    startup_row,
-                ],
-            ),
-        ]
-
-    # -- Start with Windows (the one working setting) -----------------------
-
-    def _sync_startup(self) -> None:
-        """Show the current startup state, without animating or emitting."""
-        try:
-            enabled = self._startup_manager.is_enabled()
-        except Exception as exc:
-            logger.error("Failed to query startup manager state: %s", exc)
-            enabled = False
-        self._startup_switch.set_checked_silently(enabled, animate=False)
-
-    def _on_startup_toggled(self, checked: bool) -> None:
-        try:
-            success = (
-                self._startup_manager.enable() if checked else self._startup_manager.disable()
-            )
-            if not success:
-                self._revert_startup(checked)
-                QMessageBox.warning(
-                    self,
-                    "خطأ في الإعدادات",
-                    "تعذر تعديل إعداد بدء التشغيل التلقائي مع Windows.",
-                )
-        except Exception as exc:
-            logger.error("Error setting startup to %s: %s", checked, exc)
-            self._revert_startup(checked)
-            QMessageBox.warning(
-                self,
-                "خطأ في الإعدادات",
-                f"حدث خطأ أثناء حفظ الإعداد:\n{exc}",
-            )
-
-    def _revert_startup(self, attempted: bool) -> None:
-        """Slide the switch back to the state before the failed change."""
-        self._startup_switch.set_checked_silently(not attempted, animate=True)
+    def sync_pin(self) -> None:
+        """The window's pin state changed elsewhere (e.g. by shortcut)."""
+        self._content.sync_pin(animate=self.isVisible())
 
     # -- Opening and closing ------------------------------------------------
 
     def is_open(self) -> bool:
-        return self.isVisible()
+        return self.isVisible() or (self._busy and self._entering)
 
     def open(self, return_focus: Optional[QWidget] = None) -> None:
-        """Slide the panel in over the home page."""
-        if self.isVisible() or self._animation is not None:
+        """Replace the home page with the settings screen."""
+        if self.isVisible() or self._busy:
             return
 
         self._return_focus = return_focus
-        self._sync_startup()
+        self._content.sync()
 
         self._cover_host()
-        self._layout.activate()  # sections need their final places first
+        self._layout.activate()  # blocks need their final places to be captured
         self.show()
-        self.raise_()
-        self._back.setFocus()
+        sprites = self._opening_sprites()
+        self.hide()
+        self._home.hide()  # the transition now stands in for both screens
 
-        self._animate(opening=True)
-        self._reveal.start()
+        self._play(sprites, entering=True)
 
     def close_panel(self) -> None:
-        """Slide the panel away and bring the home page back."""
-        if not self.isVisible() or self._animation is not None:
+        """Bring the home page back."""
+        if not self.isVisible() or self._busy:
             return
 
-        self._reveal.finish()
-        self._home.show()
-        focus, self._return_focus = self._return_focus, None
-        if focus is not None:
-            focus.setFocus()
-        self._animate(opening=False)
+        sprites = self._closing_sprites()
+        self.hide()  # the transition now stands in for both screens
 
-    def _animate(self, *, opening: bool) -> None:
-        """Slide + fade this panel while the home page fades the other way."""
-        rest = QPoint(0, 0)
-        away = QPoint(-PANEL_SLIDE_OFFSET, 0)
-        duration = PANEL_OPEN_MS if opening else PANEL_CLOSE_MS
-        curve = QEasingCurve.Type.OutCubic if opening else QEasingCurve.Type.InCubic
+        self._play(sprites, entering=False)
 
-        panel_fade = QGraphicsOpacityEffect(self)
-        self.setGraphicsEffect(panel_fade)
-        home_fade = QGraphicsOpacityEffect(self._home)
-        self._home.setGraphicsEffect(home_fade)
+    def _play(self, sprites: List[Sprite], *, entering: bool) -> None:
+        self._busy = True
+        self._entering = entering
+        self._transition.play(sprites)
 
-        group = QParallelAnimationGroup(self)
-        for target, name, start, end in (
-            (self, b"pos", away if opening else rest, rest if opening else away),
-            (panel_fade, b"opacity", 0.0 if opening else 1.0, 1.0 if opening else 0.0),
-            (home_fade, b"opacity", 1.0 if opening else 0.0, 0.0 if opening else 1.0),
-        ):
-            animation = QPropertyAnimation(target, name)
-            animation.setStartValue(start)
-            animation.setEndValue(end)
-            animation.setDuration(duration)
-            animation.setEasingCurve(curve)
-            group.addAnimation(animation)
-
-        group.finished.connect(lambda: self._on_motion_finished(opening))
-        self._animation = group
-        group.start()
-
-    def _on_motion_finished(self, opening: bool) -> None:
-        self.setGraphicsEffect(cast(QGraphicsEffect, None))
-        self._home.setGraphicsEffect(cast(QGraphicsEffect, None))
-        if self._animation is not None:
-            self._animation.deleteLater()
-            self._animation = None
-
-        if opening:
-            self._home.hide()  # unreachable by keyboard while settings are open
+    def _on_transition_finished(self) -> None:
+        self._busy = False
+        if self._entering:
+            self.show()
+            self._back.setFocus()
         else:
-            self.hide()
+            self._home.show()
+            focus, self._return_focus = self._return_focus, None
+            if focus is not None:
+                focus.setFocus()
+
+    # -- Snapshots ----------------------------------------------------------
+
+    def _origin_of(self, widget: QWidget) -> QPoint:
+        """Where ``widget`` sits in the host's coordinates."""
+        return widget.mapTo(self._host, QPoint(0, 0))
+
+    def _slide(
+        self,
+        widget: QWidget,
+        origin: QPoint,
+        start: QPoint,
+        end: QPoint,
+        duration_ms: int,
+    ) -> Sprite:
+        """A snapshot of ``widget`` that slides from ``start`` to ``end`` offset."""
+        return Sprite(
+            pixmap=widget.grab(),
+            origin=origin,
+            offset=(start, end),
+            duration_ms=duration_ms,
+            curve=QEasingCurve.Type.InOutCubic,
+        )
+
+    def _opening_sprites(self) -> List[Sprite]:
+        """Settings slide in from the left; home slides out to the right."""
+        width = QPoint(self._host.width(), 0)
+        return [
+            self._slide(
+                self._home, self._origin_of(self._home), _AT_REST, width, OPEN_SLIDE_MS
+            ),
+            self._slide(self, QPoint(0, 0), -width, _AT_REST, OPEN_SLIDE_MS),
+        ]
+
+    def _closing_sprites(self) -> List[Sprite]:
+        """Settings slide out to the left; home slides back in from the right."""
+        width = QPoint(self._host.width(), 0)
+
+        # The home page was hidden while settings were open: lay it out again
+        # (the window may have been resized meanwhile) before capturing it.
+        self._home.show()
+        layout = self._host.layout()
+        if layout is not None:
+            layout.activate()
+        home = self._slide(
+            self._home, self._origin_of(self._home), width, _AT_REST, CLOSE_SLIDE_MS
+        )
+        self._home.hide()
+
+        panel = self._slide(self, QPoint(0, 0), _AT_REST, -width, CLOSE_SLIDE_MS)
+        return [home, panel]
 
     # -- Covering the host --------------------------------------------------
 
     def _cover_host(self) -> None:
-        host = self.parentWidget()
-        if host is not None:
-            self.setGeometry(host.rect())
+        self.setGeometry(self._host.rect())
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
-        if watched is self.parentWidget() and event.type() == QEvent.Type.Resize:
+        if watched is self._host and event.type() == QEvent.Type.Resize:
             self._cover_host()
         return super().eventFilter(watched, event)
 

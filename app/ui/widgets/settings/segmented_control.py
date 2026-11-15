@@ -65,6 +65,15 @@ class SegmentedControl(QWidget):
     def current_index(self) -> int:
         return self._current
 
+    def set_current_index(self, index: int) -> None:
+        """Select ``index`` without animating or emitting ``selection_changed``."""
+        if not 0 <= index < len(self._labels):
+            return
+        self._current = index
+        self._animation.stop()
+        self._highlight = self._segment_rect(index)
+        self.update()
+
     # -- Geometry -----------------------------------------------------------
 
     def sizeHint(self) -> QSize:  # noqa: N802 - Qt naming

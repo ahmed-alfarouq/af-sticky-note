@@ -65,7 +65,8 @@ from app.ui.category_icons import CategoryIconProvider
 from app.ui.geometry_manager import WindowGeometryManager
 from app.ui.note_shape import NoteShape, build_note_shape
 from app.ui.pin_state import PinStateManager
-from app.ui.priority_presentation import DEFAULT_TASK_PRIORITY
+from app.ui.date_presentation import CalendarKind
+from app.ui.user_preferences import UserPreferences
 from app.ui.sheet_presentation import (
     CATEGORY_SHEET_TITLE,
     PRIORITY_SHEET_TITLE,
@@ -81,7 +82,7 @@ from app.ui.widgets.option_sheet import OptionSheet
 from app.ui.widgets.paper_surface import PaperSurface, shape_to_region
 from app.ui.widgets.progress_ring import ProgressRing
 from app.ui.widgets.quote_widget import QuoteWidget
-from app.ui.widgets.settings import SettingsPanel
+from app.ui.widgets.settings import SettingsContext, SettingsPanel
 from app.ui.widgets.task_list import TaskList
 from app.ui.widgets.task_list.ordering import open_order_key
 
@@ -154,6 +155,7 @@ class MainWindow(QMainWindow):
         window_controller: Optional[DesktopWindowController] = None,
         pin_state_manager: Optional[PinStateManager] = None,
         on_carry_forward_requested: Optional[Callable[[], int]] = None,
+        preferences: Optional[UserPreferences] = None,
     ) -> None:
         super().__init__(parent)
         self._day = day
@@ -165,6 +167,8 @@ class MainWindow(QMainWindow):
         self._window_controller = window_controller
         self._on_carry_forward_requested_cb = on_carry_forward_requested
         self._geometry_manager = geometry_manager or WindowGeometryManager()
+        self._preferences = preferences or UserPreferences(parent=self)
+        self._settings_panel: Optional[SettingsPanel] = None
 
         # Categories load once per window lifecycle: no polling, no
         # per-interaction DB reads. Both are empty when no service is wired.
@@ -266,7 +270,9 @@ class MainWindow(QMainWindow):
         # 1. Top bar, 2. date, 3. progress ring, 4. quote, 5. tasks, 6. input.
         home_layout.addWidget(self._build_header())
 
-        self._date_header = DateHeaderWidget(date_str, parent=self._paper_surface)
+        self._date_header = DateHeaderWidget(
+            date_str, parent=self._paper_surface, calendar=self._preferences.calendar
+        )
         home_layout.addWidget(self._date_header)
 
         self._progress_ring = ProgressRing(parent=self._paper_surface)
@@ -275,14 +281,17 @@ class MainWindow(QMainWindow):
         self._quote_widget = QuoteWidget(
             quote_text=quote_text, parent=self._paper_surface
         )
+        self._quote_widget.setVisible(self._preferences.daily_message)
         home_layout.addWidget(self._quote_widget)
 
         self._build_task_list(initial_tasks)
         home_layout.addWidget(self._task_list, 1)
 
         home_layout.addWidget(self._build_add_bar())
+        self._apply_default_selection()
         self._init_option_sheet()
         self._init_settings_panel()
+        self._preferences.changed.connect(self._on_preference_changed)
 
         self._init_shadow()
         self._init_shortcuts()
@@ -402,12 +411,34 @@ class MainWindow(QMainWindow):
         self._add_bar.priority_chip.open_requested.connect(self._open_priority_sheet)
 
     def _init_settings_panel(self) -> None:
-        """Settings screen that slides over the home page (needs the startup manager)."""
-        self._settings_panel: Optional[SettingsPanel] = (
-            SettingsPanel(self._paper_surface, self._home_page, self._startup_manager)
-            if self._startup_manager is not None
-            else None
+        """Settings screen that replaces the home page (needs the startup manager)."""
+        if self._startup_manager is None:
+            return
+        context = SettingsContext(
+            startup_manager=self._startup_manager,
+            preferences=self._preferences,
+            categories=self._categories,
+            is_pinned=self.is_pinned,
+            set_pinned=self._request_pin,
         )
+        self._settings_panel = SettingsPanel(
+            self._paper_surface, self._home_page, self._option_sheet, context
+        )
+
+    def _apply_default_selection(self) -> None:
+        """Start the add bar from the saved default category and priority."""
+        self._add_bar.category_chip.set_category(self._preferences.default_category_id)
+        self._add_bar.priority_chip.set_priority(self._preferences.default_priority)
+
+    def _on_preference_changed(self, key: str) -> None:
+        """Show a changed preference at once. (The week start is read when the
+        dashboard opens, so it needs nothing here.)"""
+        if key == UserPreferences.CALENDAR:
+            self._date_header.set_calendar(self._preferences.calendar)
+        elif key == UserPreferences.DAILY_MESSAGE:
+            self._quote_widget.setVisible(self._preferences.daily_message)
+        elif key in (UserPreferences.DEFAULT_CATEGORY, UserPreferences.DEFAULT_PRIORITY):
+            self._apply_default_selection()
 
     def _init_shadow(self) -> None:
         """Create the paper's drop shadow once; only its parameters change."""
@@ -544,15 +575,23 @@ class MainWindow(QMainWindow):
     def _sync_pin_presentation(self) -> None:
         self._refresh_pin_visuals()
         self._apply_shadow_variant()
+        if self._settings_panel is not None:
+            self._settings_panel.sync_pin()
 
     def _on_pin_clicked(self) -> None:
         """Toggle the pinned state through the platform layer."""
-        if not self._apply_pin_state(not self._pinned):
+        self._request_pin(not self._pinned)
+
+    def _request_pin(self, pinned: bool) -> bool:
+        """Apply a pin state; tell the user when the platform refuses it."""
+        applied = self._apply_pin_state(pinned)
+        if not applied:
             QMessageBox.warning(
                 self,
                 "تعذر تغيير التثبيت",
                 "تعذر تطبيق حالة التثبيت على سطح المكتب.",
             )
+        return applied
 
     def _reshow_with_flags(self, pinned: bool) -> None:
         """Recreate the native window with the flags for ``pinned``."""
@@ -661,7 +700,7 @@ class MainWindow(QMainWindow):
                 self._add_bar.clear()
                 # Priority resets to neutral; the category is kept for fast
                 # batch entry.
-                self._add_bar.priority_chip.set_priority(DEFAULT_TASK_PRIORITY)
+                self._add_bar.priority_chip.set_priority(self._preferences.default_priority)
                 if created_task.id is not None:
                     self._task_list.ensure_task_visible(created_task.id)
                 self._refresh_progress()
@@ -771,7 +810,7 @@ class MainWindow(QMainWindow):
         try:
             item = self._task_item(task_id)
             current_text = item.task_text if item else ""
-            current_priority = item.priority if item else DEFAULT_TASK_PRIORITY
+            current_priority = item.priority if item else self._preferences.default_priority
             current_category = item.category_id if item else DEFAULT_CATEGORY_ID
 
             from app.ui.widgets.task_edit_dialog import TaskEditDialog
@@ -878,6 +917,7 @@ class MainWindow(QMainWindow):
                 parent=self,
                 categories=self._all_categories,
                 icon_provider=self._icon_provider,
+                hijri_first=self._preferences.calendar is CalendarKind.HIJRI,
             ).exec()
         except Exception as exc:
             logger.error("Failed to open History window: %s", exc)
@@ -895,6 +935,7 @@ class MainWindow(QMainWindow):
                 icon_provider=self._icon_provider,
                 qsettings=QSettings(),
                 parent=self,
+                week_start=self._preferences.week_start,
             ).exec()
         except Exception as exc:
             logger.error("Failed to open Dashboard window: %s", exc)

@@ -54,16 +54,17 @@ __all__ = [
 ]
 
 
-def preset_range(preset: str, today: date) -> Tuple[str, str]:
+def preset_range(preset: str, today: date, week_start: int = 0) -> Tuple[str, str]:
     """Inclusive ``(start_iso, end_iso)`` for a preset ending today.
 
-    - ``week``: Monday of the current week through today (actuals only).
+    - ``week``: the first day of the current week through today (actuals
+      only). ``week_start`` is a Python weekday (Monday = 0, the default).
     - ``last7``: today minus 6 days through today.
     - ``last14``: today minus 13 days through today.
     Unknown presets raise ValueError. Pure function (no Qt) for tests.
     """
     if preset == PRESET_THIS_WEEK:
-        start = today - timedelta(days=today.weekday())
+        start = today - timedelta(days=(today.weekday() - week_start) % 7)
     elif preset == PRESET_LAST_7:
         start = today - timedelta(days=6)
     elif preset == PRESET_LAST_14:
@@ -83,8 +84,10 @@ class WeeklyDashboardWindow(QDialog):
         initial_preset: str = PRESET_LAST_7,
         parent: Optional[QWidget] = None,
         qsettings: Optional[QSettings] = None,
+        week_start: int = 0,
     ) -> None:
         super().__init__(parent)
+        self._week_start = week_start
         self._report_service = report_service
         self._icon_provider = icon_provider
         self._settings = qsettings
@@ -174,6 +177,10 @@ class WeeklyDashboardWindow(QDialog):
         self._end_edit.setObjectName("dashboardDateEdit")
         self._end_edit.setDisplayFormat("yyyy-MM-dd")
         self._end_edit.setCalendarPopup(True)
+        for edit in (self._start_edit, self._end_edit):
+            calendar = edit.calendarWidget()
+            if calendar is not None:
+                calendar.setFirstDayOfWeek(Qt.DayOfWeek(self._week_start + 1))
         self._apply_btn = QPushButton("عرض", content)
         self._apply_btn.setObjectName("dashboardApplyButton")
         self._apply_btn.clicked.connect(self._on_custom_apply)
@@ -316,7 +323,7 @@ class WeeklyDashboardWindow(QDialog):
         button = self._preset_buttons.get(preset)
         if button is not None:
             button.setChecked(True)
-        start, end = preset_range(preset, date.today())
+        start, end = preset_range(preset, date.today(), self._week_start)
         self._active_preset = preset
         self._sync_custom_edits(start, end)
         self._load_range(start, end)
@@ -327,7 +334,7 @@ class WeeklyDashboardWindow(QDialog):
             return
         preset = str(button.property("preset"))
         try:
-            start, end = preset_range(preset, date.today())
+            start, end = preset_range(preset, date.today(), self._week_start)
         except ValueError as exc:
             self._show_error(str(exc))
             return
@@ -382,6 +389,8 @@ class WeeklyDashboardWindow(QDialog):
         # Category cards: rebuild on range change only (bounded by category count).
         while self._cards_layout.count():
             child = self._cards_layout.takeAt(0)
+            if child is None:
+                continue
             widget = child.widget()
             if widget is not None:
                 widget.deleteLater()
@@ -407,7 +416,8 @@ class WeeklyDashboardWindow(QDialog):
         """Current cards in layout order."""
         cards = []
         for index in range(self._cards_layout.count()):
-            widget = self._cards_layout.itemAt(index).widget()
+            item = self._cards_layout.itemAt(index)
+            widget = item.widget() if item is not None else None
             if isinstance(widget, CategoryCard):
                 cards.append(widget)
         return cards

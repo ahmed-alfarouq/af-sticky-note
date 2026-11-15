@@ -61,13 +61,8 @@ FOCUS_COLOR = "#8FB8D8"
 FOCUS_WIDTH = 2
 
 # -- Motion -----------------------------------------------------------------
-PANEL_OPEN_MS = 300
-PANEL_CLOSE_MS = 220
-PANEL_SLIDE_OFFSET = 48            # panel enters from the left (RTL "forward")
-REVEAL_MS = 340
-REVEAL_STAGGER_MS = 60
-REVEAL_RISE = 16
-
+OPEN_SLIDE_MS = 320                # settings slide in from the left, home slides out
+CLOSE_SLIDE_MS = 280               # and back
 
 def get_settings_stylesheet() -> str:
     """QSS for the settings screen's text and back button."""
@@ -110,6 +105,10 @@ def get_settings_stylesheet() -> str:
         color: {MUTED_COLOR};
         font-size: {VALUE_PX}px;
         background: transparent;
+    }}
+
+    QLabel#settingsRowValue[pressed="true"] {{
+        color: #ffffff;
     }}
 
     QToolButton#settingsBackButton {{

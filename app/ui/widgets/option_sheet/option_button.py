@@ -35,7 +35,7 @@ from app.ui.styles.option_sheet_style import (
     OPTION_SELECTED_FILL,
 )
 
-__all__ = ["OptionButton"]
+__all__ = ["IconSource", "OptionButton"]
 
 _NAVIGATION_KEYS = (Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_Home, Qt.Key.Key_End)
 _ACTIVATE_KEYS = (Qt.Key.Key_Return, Qt.Key.Key_Enter)
@@ -83,9 +83,10 @@ class _Marker(QWidget):
 
 
 class OptionButton(QAbstractButton):
-    """Marker, label, optional hint, and a check mark when selected.
+    """Optional marker, label, optional hint, and a check mark when selected.
 
-    The row paints its own rounded background: blue border and fill when
+    The marker is an icon, a colored shape, or absent (a plain text row). The
+    row paints its own rounded background: blue border and fill when
     selected, a soft border while it holds keyboard focus.
     """
 
@@ -128,9 +129,9 @@ class OptionButton(QAbstractButton):
         layout.setContentsMargins(OPTION_PAD_H, 0, OPTION_PAD_H, 0)
         layout.setSpacing(OPTION_GAP)
 
-        layout.addWidget(
-            self._make_marker(option, icon_source), 0, Qt.AlignmentFlag.AlignVCenter
-        )
+        marker = self._make_marker(option, icon_source)
+        if marker is not None:
+            layout.addWidget(marker, 0, Qt.AlignmentFlag.AlignVCenter)
         layout.addLayout(self._build_text(option), 1)
 
         if self._selected:
@@ -143,10 +144,12 @@ class OptionButton(QAbstractButton):
         for child in self.findChildren(QWidget):
             child.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-    def _make_marker(self, option: SheetOption, icon_source: IconSource) -> QWidget:
+    def _make_marker(self, option: SheetOption, icon_source: IconSource) -> Optional[QWidget]:
         if option.icon_key:
             return _IconMarker(icon_source.icon_for_key(option.icon_key), self)
-        return _Marker(option.marker_color, option.marker_shape, self)
+        if option.marker_color:
+            return _Marker(option.marker_color, option.marker_shape, self)
+        return None
 
     def _build_text(self, option: SheetOption) -> QVBoxLayout:
         column = QVBoxLayout()
@@ -217,4 +220,3 @@ class OptionButton(QAbstractButton):
         if self._selected:
             return QColor(OPTION_SELECTED_BORDER)
         return None
-    

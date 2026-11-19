@@ -11,7 +11,13 @@ from enum import Enum
 
 from app.infrastructure.clock import DateDisplay
 
-__all__ = ["CalendarKind", "DateHeaderText", "date_header_text"]
+__all__ = [
+    "ArchiveDateText",
+    "CalendarKind",
+    "DateHeaderText",
+    "archive_date_text",
+    "date_header_text",
+]
 
 
 class CalendarKind(str, Enum):
@@ -47,3 +53,22 @@ def date_header_text(display: DateDisplay, calendar: CalendarKind) -> DateHeader
         primary_line=hijri_month_year,
         secondary_line=f"{display.weekday_ar} · {display.gregorian_day} {gregorian_month_year}",
     )
+
+
+@dataclass(frozen=True)
+class ArchiveDateText:
+    """The two lines naming a day in the archive."""
+
+    primary: str    # the full date in the leading calendar
+    secondary: str  # weekday and the full date in the other calendar
+
+
+def archive_date_text(display: DateDisplay, calendar: CalendarKind) -> ArchiveDateText:
+    """Word a whole day for the archive with ``calendar`` leading."""
+    hijri = f"{display.hijri_day} {display.hijri_month_name} {display.hijri_year} هـ"
+    gregorian = (
+        f"{display.gregorian_day} {display.gregorian_month_name} {display.gregorian_year}"
+    )
+    if calendar is CalendarKind.GREGORIAN:
+        return ArchiveDateText(primary=gregorian, secondary=f"{display.weekday_ar} · {hijri}")
+    return ArchiveDateText(primary=hijri, secondary=f"{display.weekday_ar} · {gregorian}")

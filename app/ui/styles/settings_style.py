@@ -2,19 +2,9 @@
 
 from __future__ import annotations
 
-__all__ = ["get_settings_stylesheet"]
+from app.ui.styles.screen_style import FOCUS_COLOR, FOCUS_WIDTH
 
-# -- Panel ------------------------------------------------------------------
-PANEL_MARGINS = (16, 12, 16, 16)   # left, top, right, bottom (matches the paper)
-PANEL_GAP = 12                     # between nav, sections, and inside a section
-
-# -- Nav --------------------------------------------------------------------
-NAV_GAP = 4
-BACK_BUTTON_SIZE = 44
-BACK_ICON_SIZE = 20
-BACK_ICON_COLOR = "#a3aec2"
-BACK_ICON_HOVER = "#ffffff"
-TITLE_PX = 20
+__all__ = ["FOCUS_COLOR", "FOCUS_WIDTH", "get_settings_stylesheet"]
 
 # -- Group and rows ---------------------------------------------------------
 GROUP_FILL = "#222b3c"
@@ -57,28 +47,16 @@ SEG_TEXT_ACTIVE = "#ffffff"
 SEG_TEXT_IDLE = "#a3aec2"
 SEG_MS = 240
 
-FOCUS_COLOR = "#8FB8D8"
-FOCUS_WIDTH = 2
+PANEL_GAP = 12                     # between a section's heading and its group
 
-# -- Motion -----------------------------------------------------------------
-OPEN_SLIDE_MS = 320                # settings slide in from the left, home slides out
-CLOSE_SLIDE_MS = 280               # and back
 
 def get_settings_stylesheet() -> str:
-    """QSS for the settings screen's text and back button."""
+    """QSS for the settings screen's rows and text."""
     return f"""
-    QWidget#settingsPanel,
     QWidget#settingsContent,
     QScrollArea#settingsScroll {{
         background: transparent;
         border: none;
-    }}
-
-    QLabel#settingsTitle {{
-        color: #ffffff;
-        font-size: {TITLE_PX}px;
-        font-weight: 700;
-        background: transparent;
     }}
 
     QLabel#settingsSection {{
@@ -109,16 +87,5 @@ def get_settings_stylesheet() -> str:
 
     QLabel#settingsRowValue[pressed="true"] {{
         color: #ffffff;
-    }}
-
-    QToolButton#settingsBackButton {{
-        background-color: transparent;
-        border: none;
-        border-radius: 12px;
-    }}
-
-    QToolButton#settingsBackButton:focus {{
-        border: 2px solid {FOCUS_COLOR};
-        border-radius: 12px;
     }}
     """

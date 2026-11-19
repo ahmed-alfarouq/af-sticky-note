@@ -31,6 +31,7 @@ from app.ui.widgets.progress_ring_state import (
 
 __all__ = [
     "ProgressRing",
+    "RingGraphic",
     "RING_SIZE",
     "RING_WIDTH",
     "DEFAULT_SWEEP_MS",
@@ -65,7 +66,7 @@ _RING_ACCESSIBLE_NAME = "تقدم مهام اليوم"
 _GRAPHIC_ACCESSIBLE_NAME = "تقدم المهام"
 
 
-class _RingGraphic(QWidget):
+class RingGraphic(QWidget):
     """SVG-rendered circular progress indicator."""
 
     def __init__(self, size: int, parent: QWidget | None = None) -> None:
@@ -223,7 +224,7 @@ class ProgressRing(QWidget):
         self._displayed = 0.0
         self._animation: QVariantAnimation | None = None
 
-        self._graphic = _RingGraphic(size, self)
+        self._graphic = RingGraphic(size, self)
 
         self._fraction_label = QLabel(self)
         self._fraction_label.setObjectName("progressFraction")

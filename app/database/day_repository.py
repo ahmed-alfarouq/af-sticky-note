@@ -55,6 +55,23 @@ class DayRepository:
         rows = self._conn.execute("SELECT date FROM days ORDER BY date DESC").fetchall()
         return [row["date"] for row in rows]
 
+    def list_dates_with_tasks_before(self, date: str) -> list[str]:
+        """Return the dates before ``date`` that have at least one task, newest first.
+
+        Days that exist but never held a task have nothing to show, so they
+        are left out.
+        """
+        rows = self._conn.execute(
+            """
+            SELECT d.date FROM days d
+            WHERE d.date < ?
+              AND EXISTS (SELECT 1 FROM tasks t WHERE t.day_id = d.id)
+            ORDER BY d.date DESC
+            """,
+            (date,),
+        ).fetchall()
+        return [row["date"] for row in rows]
+
     @staticmethod
     def _row_to_day(row: sqlite3.Row) -> Day:
         return Day(

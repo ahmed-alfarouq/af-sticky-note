@@ -65,7 +65,6 @@ from app.ui.category_icons import CategoryIconProvider
 from app.ui.geometry_manager import WindowGeometryManager
 from app.ui.note_shape import NoteShape, build_note_shape
 from app.ui.pin_state import PinStateManager
-from app.ui.date_presentation import CalendarKind
 from app.ui.user_preferences import UserPreferences
 from app.ui.sheet_presentation import (
     CATEGORY_SHEET_TITLE,
@@ -76,6 +75,7 @@ from app.ui.sheet_presentation import (
 )
 from app.ui.styles.app_style import get_application_stylesheet
 from app.ui.widgets.add_task_bar import AddTaskBar
+from app.ui.widgets.archive import ArchivePanel
 from app.ui.widgets.date_header import DateHeaderWidget
 from app.ui.widgets.icon_button import IconButton
 from app.ui.widgets.option_sheet import OptionSheet
@@ -169,6 +169,7 @@ class MainWindow(QMainWindow):
         self._geometry_manager = geometry_manager or WindowGeometryManager()
         self._preferences = preferences or UserPreferences(parent=self)
         self._settings_panel: Optional[SettingsPanel] = None
+        self._archive_panel: Optional[ArchivePanel] = None
 
         # Categories load once per window lifecycle: no polling, no
         # per-interaction DB reads. Both are empty when no service is wired.
@@ -291,6 +292,7 @@ class MainWindow(QMainWindow):
         self._apply_default_selection()
         self._init_option_sheet()
         self._init_settings_panel()
+        self._init_archive_panel()
         self._preferences.changed.connect(self._on_preference_changed)
 
         self._init_shadow()
@@ -423,6 +425,20 @@ class MainWindow(QMainWindow):
         )
         self._settings_panel = SettingsPanel(
             self._paper_surface, self._home_page, self._option_sheet, context
+        )
+
+    def _init_archive_panel(self) -> None:
+        """Archive screen that replaces the home page (needs the history service)."""
+        if self._history_service is None:
+            return
+        self._archive_panel = ArchivePanel(
+            self._paper_surface,
+            self._home_page,
+            history_service=self._history_service,
+            categories=self._all_categories,
+            icon_provider=self._icon_provider,
+            preferences=self._preferences,
+            today=lambda: self._day.date,
         )
 
     def _apply_default_selection(self) -> None:
@@ -904,23 +920,11 @@ class MainWindow(QMainWindow):
     # -------------------------------------------------------------------------
 
     def _on_history_requested(self) -> None:
-        """Open the read-only History viewer."""
-        if self._history_service is None:
+        """Slide the archive in over the home page."""
+        if self._archive_panel is None:
             logger.warning("HistoryService not configured on MainWindow")
             return
-        try:
-            from app.ui.windows.history_window import HistoryWindow
-
-            HistoryWindow(
-                history_service=self._history_service,
-                initial_date=self._day.date,
-                parent=self,
-                categories=self._all_categories,
-                icon_provider=self._icon_provider,
-                hijri_first=self._preferences.calendar is CalendarKind.HIJRI,
-            ).exec()
-        except Exception as exc:
-            logger.error("Failed to open History window: %s", exc)
+        self._archive_panel.open(return_focus=self._archive_btn)
 
     def _on_dashboard_requested(self) -> None:
         """Open the weekly reporting dashboard (fresh dialog per open)."""

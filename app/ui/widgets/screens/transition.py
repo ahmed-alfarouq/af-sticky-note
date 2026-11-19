@@ -1,4 +1,4 @@
-"""Screen-to-screen transition painted from snapshots.
+"""Screen-to-screen transition painted from snapshots (shared by every full screen).
 
 Instead of animating live widgets (which flickers when graphics effects
 stack on a translucent window), each screen is captured once as a pixmap and

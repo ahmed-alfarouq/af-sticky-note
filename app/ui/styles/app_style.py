@@ -18,7 +18,9 @@ from __future__ import annotations
 
 from app.infrastructure.fonts import get_default_font_family
 from app.ui.styles.add_task_bar_style import get_add_task_bar_stylesheet
+from app.ui.styles.archive_style import get_archive_stylesheet
 from app.ui.styles.option_sheet_style import get_option_sheet_stylesheet
+from app.ui.styles.screen_style import get_screen_stylesheet
 from app.ui.styles.settings_style import get_settings_stylesheet
 from app.ui.styles.task_item_style import get_task_item_stylesheet
 from app.ui.styles.task_list_style import get_task_list_stylesheet
@@ -604,44 +606,6 @@ def get_application_stylesheet() -> str:
         background: transparent;
     }}
 
-    QPushButton#historyNavButton {{
-        background-color: transparent;
-        color: {COLOR_TEXT_SECONDARY};
-        border: 1px solid {COLOR_CARD_BORDER};
-        border-radius: 5px;
-        padding: 4px 10px;
-        font-size: 12px;
-    }}
-
-    QPushButton#historyNavButton:hover {{
-        background-color: #1E2738;
-        color: {COLOR_TEXT_PRIMARY};
-        border-color: {COLOR_SOFT};
-    }}
-
-    /* History window: the dual-calendar date and the progress summary are the
-       two most informative lines in the window. They carry object names but
-       had no rules, so they rendered at the platform default size while every
-       neighbouring control used 12-13px. */
-    QLabel#historyDualDate {{
-        color: {COLOR_SOFT};
-        font-size: 13px;
-        font-weight: 600;
-        background: transparent;
-    }}
-
-    QLabel#historyStatsLabel {{
-        color: {COLOR_TEXT_SECONDARY};
-        font-size: 12px;
-        font-weight: 500;
-        background: transparent;
-    }}
-
-    QPushButton#historyNavButton:disabled {{
-        color: #4D5768;
-        border-color: #1E2533;
-    }}
-
     /* Context Menus */
     QMenu {{
         background-color: {COLOR_SURFACE};
@@ -777,5 +741,7 @@ def get_application_stylesheet() -> str:
     {get_task_list_stylesheet()}
     {get_option_sheet_stylesheet()}
     {get_add_task_bar_stylesheet()}
+    {get_screen_stylesheet()}
     {get_settings_stylesheet()}
+    {get_archive_stylesheet()}
     """

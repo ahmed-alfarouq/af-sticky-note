@@ -38,6 +38,14 @@ class HistoryService:
         """Return all historical dates recorded in the database (newest first)."""
         return self._day_repo.list_all_dates_desc()
 
+    def get_archive_dates(self, before_date: str) -> List[str]:
+        """Return the past dates worth showing in the archive (newest first).
+
+        These are the recorded days strictly before ``before_date`` (normally
+        today) that hold at least one task.
+        """
+        return self._day_repo.list_dates_with_tasks_before(before_date)
+
     def get_day_history(self, date_str: str) -> DayHistoryView:
         """Retrieve historical snapshot for a specific calendar date (read-only).
 

@@ -155,9 +155,9 @@ def test_main_window_exit_control_invokes_shared_shutdown():
         assert hasattr(window, "_close_btn")
         assert window._close_btn is not None
         assert hasattr(window, "_header_frame")
-        # Verify _header_frame has RightToLeft layout direction
+        # Physical LeftToRight keeps the exit control on the top-left.
         from PySide6.QtCore import Qt
-        assert window._header_frame.layoutDirection() == Qt.LayoutDirection.RightToLeft
+        assert window._header_frame.layoutDirection() == Qt.LayoutDirection.LeftToRight
 
         # Trigger exit action
         window._on_exit_clicked()

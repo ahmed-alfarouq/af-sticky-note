@@ -1,6 +1,7 @@
 """Dialog for editing an existing task's text, category, and priority.
 
-Ensures proper Arabic RTL layout, styled inputs, and validation.
+Arabic RTL layout. Enter saves, Escape cancels, and empty text is rejected
+without writing anything.
 """
 from __future__ import annotations
 
@@ -8,6 +9,7 @@ from typing import Optional, Sequence
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QBoxLayout,
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -36,6 +38,7 @@ class TaskEditDialog(QDialog):
         icon_provider: Optional[CategoryIconProvider] = None,
     ) -> None:
         super().__init__(parent)
+        self.setObjectName("taskEditDialog")
         self.setWindowTitle("تعديل المهمة")
         self.setModal(True)
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
@@ -51,7 +54,9 @@ class TaskEditDialog(QDialog):
 
         self._input_field = QLineEdit(self)
         self._input_field.setObjectName("taskInputField")
+        self._input_field.setTextMargins(12, 0, 14, 0)
         self._input_field.setText(initial_text)
+        self._input_field.setAccessibleName("نص المهمة")
         self._input_field.selectAll()
         layout.addWidget(self._input_field)
 
@@ -75,21 +80,33 @@ class TaskEditDialog(QDialog):
 
         button_row = QHBoxLayout()
         button_row.setSpacing(8)
-
+        button_row.setDirection(QBoxLayout.Direction.RightToLeft)
         self._save_btn = QPushButton("حفظ", self)
         self._save_btn.setObjectName("saveButton")
+        self._save_btn.setDefault(True)
+        self._save_btn.setAutoDefault(True)
         self._save_btn.clicked.connect(self.accept)
 
         self._cancel_btn = QPushButton("إلغاء", self)
         self._cancel_btn.setObjectName("cancelButton")
+        self._cancel_btn.setAutoDefault(False)
         self._cancel_btn.clicked.connect(self.reject)
 
         button_row.addStretch(1)
         button_row.addWidget(self._save_btn)
         button_row.addWidget(self._cancel_btn)
-
         layout.addLayout(button_row)
+
         self._input_field.returnPressed.connect(self.accept)
+        self.adjustSize()
+
+    def accept(self) -> None:
+        """Save only when the text is non-empty. Otherwise keep the dialog open."""
+        if not self.get_text():
+            self._input_field.setFocus()
+            self._input_field.selectAll()
+            return
+        super().accept()
 
     def get_text(self) -> str:
         """Return the trimmed edited text."""

@@ -120,6 +120,16 @@ class _ResizeState:
     start_mouse: QPoint
 
 
+class StartupManager(Protocol):
+    """Protocol required by the Settings window."""
+
+    def is_enabled(self) -> bool: ...
+
+    def enable(self) -> None: ...
+
+    def disable(self) -> None: ...
+
+
 class MainWindow(QMainWindow):
     """Sticky Note main window coordinating the daily quote and tasks."""
 

@@ -232,7 +232,7 @@ def get_application_stylesheet() -> str:
         border-radius: 4px;
         font-size: 11px;
         font-weight: 600;
-        padding: 2px 6px;
+        padding: 3px 8px;
     }}
 
     QLabel#priorityBadgeLow {{
@@ -242,7 +242,7 @@ def get_application_stylesheet() -> str:
         border-radius: 4px;
         font-size: 11px;
         font-weight: 600;
-        padding: 2px 6px;
+        padding: 3px 8px;
     }}
 
     /* Priority Selector (new-task row + edit dialog).
@@ -366,6 +366,13 @@ def get_application_stylesheet() -> str:
     }}
 
     /* Checkbox Styling with clear accessible states */
+    QCheckBox#taskCheckBox {{
+        spacing: 0px;
+        padding: 0px;
+        margin: 0px;
+        background: transparent;
+    }}
+
     QCheckBox {{
         spacing: 8px;
     }}
@@ -403,6 +410,70 @@ def get_application_stylesheet() -> str:
 
     QCheckBox::indicator:checked:focus {{
         border: 2px solid {COLOR_FOCUS_RING};
+    }}
+
+    QWidget#taskInputRow {{
+        background: transparent;
+        border: none;
+    }}
+
+    QDialog#taskEditDialog {{
+        background-color: {COLOR_STICKY_PAPER};
+    }}
+
+    QLabel#taskEditLabel {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: 13px;
+        background: transparent;
+    }}
+
+    QPushButton#saveButton,
+    QPushButton#cancelButton {{
+        background-color: {COLOR_CARD_SURFACE};
+        color: {COLOR_TEXT_PRIMARY};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 6px;
+        padding: 6px 16px;
+        font-size: 13px;
+        min-width: 72px;
+    }}
+
+    QPushButton#saveButton {{
+        background-color: {COLOR_TRUST};
+        border-color: {COLOR_TRUST};
+    }}
+
+    QPushButton#saveButton:hover,
+    QPushButton#cancelButton:hover {{
+        border-color: {COLOR_SOFT};
+    }}
+
+    /* One surface for the priority value. No detached combo drop-down box. */
+    QToolButton#taskPriorityButton {{
+        background-color: {COLOR_INPUT_BG};
+        color: {COLOR_TEXT_PRIMARY};
+        border: 1.5px solid {COLOR_CARD_BORDER};
+        border-radius: 8px;
+        padding: 8px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        min-height: 22px;
+        min-width: 72px;
+    }}
+
+    QToolButton#taskPriorityButton:hover {{
+        border-color: #384860;
+        background-color: #18202F;
+    }}
+
+    QToolButton#taskPriorityButton:focus {{
+        border: 2px solid {COLOR_FOCUS_RING};
+    }}
+
+    QToolButton#taskPriorityButton::menu-indicator {{
+        image: none;
+        width: 0px;
+        height: 0px;
     }}
 
     /* Common Close & Action Buttons (History & Settings) */
@@ -625,6 +696,11 @@ def get_application_stylesheet() -> str:
     QMenu::item:selected {{
         background-color: #232C3D;
         color: #FFFFFF;
+    }}
+
+    QMenu::item:checked {{
+        color: {COLOR_SOFT};
+        font-weight: 600;
     }}
 
     QMenu::separator {{

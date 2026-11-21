@@ -1,20 +1,31 @@
-"""Task input field widget with accessibility and visual indicators."""
+"""Task input row: dominant text field plus a compact priority control."""
 from __future__ import annotations
 
 from typing import Optional
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QLineEdit, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QWidget
+
+from app.core.models import TaskPriority
+from app.ui.layout_metrics import INPUT_GAP
+from app.ui.widgets.priority_selector import PrioritySelector
 
 __all__ = ["TaskInput", "PLACEHOLDER_TEXT"]
 
 PLACEHOLDER_TEXT = "اكتب مهمة جديدة..."
 
 
-class TaskInput(QLineEdit):
-    """Line edit specialized for adding sticky note tasks."""
+class TaskInput(QWidget):
+    """Bottom entry row.
 
-    task_submitted = Signal(str)
+    Physical placement is explicit and independent of application RTL:
+    the text field is on the right, the priority control is the compact
+    accessory on the left. The field itself is RTL so Arabic placeholder
+    and typed text start on the right.
+    """
+
+    # raw text, TaskPriority value ("LOW" / "MEDIUM" / "HIGH")
+    task_submitted = Signal(str, str)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)

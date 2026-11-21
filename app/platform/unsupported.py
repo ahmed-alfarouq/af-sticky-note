@@ -35,6 +35,10 @@ class NoOpDesktopWindowController(DesktopWindowController):
     def is_attached(self) -> bool:
         return self._attached
 
+    def set_pinned(self, window_handle: int, pinned: bool) -> bool:
+        logger.debug("Pin state change requested on unsupported platform (no-op).")
+        return False
+
 
 class NoOpStartupManager(StartupManager):
     """No-op startup manager for unsupported platforms."""

@@ -7,7 +7,7 @@ including PySide6, bundled Thmanyah fonts, initial quotes seed, and app modules.
 import os
 import sys
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
@@ -16,63 +16,24 @@ repo_root = Path(SPECPATH).resolve().parent if Path(SPECPATH).name == "packaging
 # Bundled read-only resources
 datas = [
     (str(repo_root / "assets" / "logo.png"), "assets"),
+    (str(repo_root / "assets" / "icons"), "assets/icons"),
     (str(repo_root / "data" / "quotes.txt"), "data"),
     (str(repo_root / "fonts" / "thmanyah"), "fonts/thmanyah"),
     (str(repo_root / "app" / "database" / "migrations"), "app/database/migrations"),
+    # qtawesome icon font (.ttf) + glyph name map (.json); no built-in hook
+    # ships them (v3 §1.4). A missing font renders blank buttons in the exe.
+    *collect_data_files("qtawesome"),
 ]
 
-hiddenimports = [
-    "app",
-    "app.config",
-    "app.config.settings",
-    "app.core",
-    "app.core.models",
-    "app.core.daily_stats",
-    "app.core.services",
-    "app.core.services.daily_lifecycle_coordinator",
-    "app.core.services.daily_rollover_service",
-    "app.core.services.history_service",
-    "app.core.services.quote_import_service",
-    "app.core.services.quote_service",
-    "app.core.services.task_service",
-    "app.database",
-    "app.database.connection",
-    "app.database.day_repository",
-    "app.database.migrations",
-    "app.database.quote_repository",
-    "app.database.quote_rotation_state_repository",
-    "app.database.quote_usage_repository",
-    "app.database.task_repository",
-    "app.database.transaction",
-    "app.database.unit_of_work",
-    "app.infrastructure",
-    "app.infrastructure.clock",
-    "app.infrastructure.fonts",
-    "app.infrastructure.paths",
-    "app.infrastructure.quotes_file",
-    "app.platform",
-    "app.platform.interfaces",
-    "app.platform.provider",
-    "app.platform.unsupported",
-    "app.platform.windows",
-    "app.platform.windows.desktop_window",
-    "app.platform.windows.native",
-    "app.platform.windows.startup",
-    "app.platform.windows.tray",
-    "app.ui",
-    "app.ui.geometry_manager",
-    "app.ui.styles",
-    "app.ui.styles.app_style",
-    "app.ui.widgets",
-    "app.ui.widgets.quote_widget",
-    "app.ui.widgets.task_edit_dialog",
-    "app.ui.widgets.task_input",
-    "app.ui.widgets.task_item",
-    "app.ui.widgets.task_list",
-    "app.ui.windows",
-    "app.ui.windows.history_window",
-    "app.ui.windows.main_window",
-    "app.ui.windows.settings_window",
+# Every module of the app package is collected automatically, so a new module
+# (or a module only imported lazily) is never left out of the executable. The
+# build runs in a child process, so the repository root must be on its path.
+os.environ["PYTHONPATH"] = os.pathsep.join(
+    filter(None, [str(repo_root), os.environ.get("PYTHONPATH", "")])
+)
+hiddenimports = collect_submodules("app") + [
+    "qtawesome",
+    "qtpy",
     "sqlite3",
 ]
 

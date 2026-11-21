@@ -13,7 +13,7 @@ def test_database_initializes_successfully(db_connection):
             "SELECT name FROM sqlite_master WHERE type='table'"
         )
     }
-    assert {"days", "tasks", "quotes", "schema_migrations"} <= tables
+    assert {"days", "tasks", "quotes", "categories", "schema_migrations"} <= tables
 
 
 def test_first_migration_is_applied(db_connection):

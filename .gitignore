@@ -9,3 +9,6 @@ dist/
 *.spec.bak
 Output/
 *.iss.bak
+
+# Local-only dev tooling (not part of the product)
+devtools/

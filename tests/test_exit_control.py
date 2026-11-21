@@ -107,20 +107,30 @@ def test_main_window_header_action_buttons_exist_and_wired():
 
         assert hasattr(window, "_settings_btn")
         assert window._settings_btn is not None
-        assert window._settings_btn.text() == "⚙"
+        assert window._settings_btn.text() == ""
+        assert window._settings_btn.toolTip() == "إعدادات"
+        assert not window._settings_btn.icon().isNull()
 
-        assert hasattr(window, "_history_btn")
-        assert window._history_btn is not None
-        assert window._history_btn.text() == "📄"
+        assert hasattr(window, "_archive_btn")
+        assert window._archive_btn is not None
+        assert window._archive_btn.text() == ""
+        assert window._archive_btn.toolTip() == "الأرشيف"
+        assert not window._archive_btn.icon().isNull()
 
-        assert hasattr(window, "_exit_btn")
-        assert window._exit_btn is not None
-        assert window._exit_btn.text() == "✕"
+        assert hasattr(window, "_close_btn")
+        assert window._close_btn is not None
+        assert window._close_btn.text() == ""
+        assert window._close_btn.toolTip() == "إغلاق"
+        assert not window._close_btn.icon().isNull()
 
-        # Physical LeftToRight so Exit stays top-left even if the app is RTL.
-        assert window._header_frame.layoutDirection() == Qt.LayoutDirection.LeftToRight
-    except (ImportError, Exception):
-        pass
+        assert hasattr(window, "_pin_btn")
+        assert window._pin_btn is not None
+        assert window._pin_btn.toolTip() in ("تثبيت على سطح المكتب", "إلغاء التثبيت")
+
+        # Verify layout direction is RightToLeft (anchoring buttons to the right side in RTL)
+        assert window._header_frame.layoutDirection() == Qt.LayoutDirection.RightToLeft
+    except ImportError:
+        pytest.skip("PySide6 is not available; MainWindow cannot be built")
 
 
 def test_main_window_exit_control_invokes_shared_shutdown():
@@ -142,8 +152,8 @@ def test_main_window_exit_control_invokes_shared_shutdown():
             on_exit_requested=mock_exit_cb,
         )
 
-        assert hasattr(window, "_exit_btn")
-        assert window._exit_btn is not None
+        assert hasattr(window, "_close_btn")
+        assert window._close_btn is not None
         assert hasattr(window, "_header_frame")
         # Physical LeftToRight keeps the exit control on the top-left.
         from PySide6.QtCore import Qt
@@ -153,6 +163,5 @@ def test_main_window_exit_control_invokes_shared_shutdown():
         window._on_exit_clicked()
         mock_exit_cb.assert_called_once()
         assert window._allow_window_close is True
-    except (ImportError, Exception):
-        # Graceful pass in headless environments where PySide6 is not present
-        pass
+    except ImportError:
+        pytest.skip("PySide6 is not available; MainWindow cannot be built")

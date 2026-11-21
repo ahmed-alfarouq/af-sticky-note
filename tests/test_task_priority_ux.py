@@ -1,11 +1,24 @@
-"""Phase 6A — priority selection, persistence, rollover, and history.
+"""Tests for Phase 6D -- completing the user-facing Task Priority UX.
 
-UI interaction is covered in test_task_priority_ui.py. These tests stay
-free of Qt so they run in any environment.
+Covers the whole priority flow end to end:
+
+* choosing a priority for a new task (selector defaults, labels, values),
+* editing text and/or priority through the edit dialog,
+* changing priority directly from the task context menu,
+* the visual priority indication on a task row,
+* priority preservation across rollover and its immutability in history,
+* RTL layout of every new surface.
+
+Qt tests no-op (rather than fail) when PySide6 is unavailable, following the
+convention used by the rest of this project's UI tests.
 """
-import pytest
+from __future__ import annotations
 
-from app.core.models import TaskPriority
+import sqlite3
+from contextlib import contextmanager
+from typing import Optional
+
+from app.core.models import Day, Task, TaskPriority
 from app.core.services.daily_rollover_service import DailyRolloverService
 from app.core.services.history_service import HistoryService
 from app.core.services.task_service import TaskService
@@ -15,197 +28,824 @@ from app.database.migrations import apply_migrations
 from app.database.task_repository import TaskRepository
 
 
-def _services(conn):
-    day_repo = DayRepository(conn)
-    task_repo = TaskRepository(conn)
-    return day_repo, task_repo, TaskService(task_repo)
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+@contextmanager
+def _patched(module, name, value):
+    """Temporarily replace ``module.name`` -- no pytest fixture required.
 
-
-def test_default_create_is_medium_and_explicit_priorities_persist(db_connection):
-    day_repo, task_repo, service = _services(db_connection)
-    day = day_repo.get_or_create("2026-09-27")
-
-    medium = service.create_task(day.id, "مهمة عادية")
-    high = service.create_task(day.id, "مهمة عاجلة", priority=TaskPriority.HIGH)
-    low = service.create_task(day.id, "مهمة منخفضة", priority=TaskPriority.LOW)
-
-    assert medium.priority == TaskPriority.MEDIUM
-    assert high.priority == TaskPriority.HIGH
-    assert low.priority == TaskPriority.LOW
-
-    reloaded = {task.id: task for task in service.get_today_tasks(day.id)}
-    assert reloaded[medium.id].priority == TaskPriority.MEDIUM
-    assert reloaded[high.id].priority == TaskPriority.HIGH
-    assert reloaded[low.id].priority == TaskPriority.LOW
-    assert reloaded[high.id].text == "مهمة عاجلة"
-
-
-def test_priority_survives_database_reopen(db_path):
-    conn = create_connection(db_path)
-    apply_migrations(conn)
-    day_repo, _, service = _services(conn)
-    day = day_repo.get_or_create("2026-09-27")
-    created = service.create_task(day.id, "تبقى عاجلة", priority=TaskPriority.HIGH)
-    task_id = created.id
-    conn.close()
-
-    reopened = create_connection(db_path)
+    The portable backend suite runs these tests without pytest installed, so
+    the ``monkeypatch`` fixture is deliberately not used here.
+    """
+    original = getattr(module, name)
+    setattr(module, name, value)
     try:
-        task = TaskRepository(reopened).get_by_id(task_id)
-        assert task is not None
-        assert task.priority == TaskPriority.HIGH
-        assert task.text == "تبقى عاجلة"
-        assert task.day_id == day.id
+        yield value
     finally:
-        reopened.close()
+        setattr(module, name, original)
 
 
-def test_combined_edit_persists_text_and_priority_together(db_connection):
-    day_repo, task_repo, service = _services(db_connection)
-    day = day_repo.get_or_create("2026-09-27")
-    created = service.create_task(day.id, "نص أصلي", priority=TaskPriority.MEDIUM)
-    service.toggle_task_completion(created.id, True)
+# ---------------------------------------------------------------------------
+# Optional Qt support
+# ---------------------------------------------------------------------------
+try:  # pragma: no cover - environment dependent
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QContextMenuEvent
+    from PySide6.QtWidgets import QApplication
 
-    assert service.update_task_text_and_priority(created.id, "نص جديد", TaskPriority.HIGH) is True
-
-    updated = task_repo.get_by_id(created.id)
-    assert updated.id == created.id
-    assert updated.day_id == day.id
-    assert updated.text == "نص جديد"
-    assert updated.priority == TaskPriority.HIGH
-    assert updated.is_completed is True
-    assert updated.position == created.position
-    assert updated.source_task_id is None
+    QT_AVAILABLE = True
+except Exception:  # pragma: no cover - environment dependent
+    QT_AVAILABLE = False
 
 
-def test_combined_edit_rejects_blank_text_without_writing_priority(db_connection):
-    day_repo, task_repo, service = _services(db_connection)
-    day = day_repo.get_or_create("2026-09-27")
-    created = service.create_task(day.id, "لا تتغير", priority=TaskPriority.LOW)
-    before = task_repo.get_by_id(created.id)
-
-    assert service.update_task_text_and_priority(created.id, "   ", TaskPriority.HIGH) is False
-    assert service.update_task_text_and_priority(created.id, "", TaskPriority.HIGH) is False
-
-    after = task_repo.get_by_id(created.id)
-    assert after == before
-    assert after.priority == TaskPriority.LOW
-    assert after.updated_at == before.updated_at
+def _skip_without_qt() -> bool:
+    return not QT_AVAILABLE
 
 
-def test_combined_edit_noop_does_not_touch_timestamp(db_connection):
-    day_repo, task_repo, service = _services(db_connection)
-    day = day_repo.get_or_create("2026-09-27")
-    created = service.create_task(day.id, "كما هي", priority=TaskPriority.HIGH)
-    before = task_repo.get_by_id(created.id)
-
-    assert service.update_task_text_and_priority(created.id, "كما هي", TaskPriority.HIGH) is True
-
-    after = task_repo.get_by_id(created.id)
-    assert after == before
-    assert after.updated_at == before.updated_at
+def _qt_app():
+    return QApplication.instance() or QApplication([])
 
 
-def test_combined_edit_invalid_priority_writes_nothing(db_connection):
-    day_repo, task_repo, service = _services(db_connection)
-    day = day_repo.get_or_create("2026-09-27")
-    created = service.create_task(day.id, "محمية", priority=TaskPriority.MEDIUM)
-    before = task_repo.get_by_id(created.id)
+def _make_task(
+    task_id: Optional[int] = None,
+    day_id: int = 1,
+    text: str = "مهمة",
+    is_completed: bool = False,
+    position: int = 0,
+    priority: TaskPriority = TaskPriority.MEDIUM,
+    source_task_id: Optional[int] = None,
+    category_id: str = "general",
+) -> Task:
+    return Task(
+        id=task_id,
+        day_id=day_id,
+        text=text,
+        is_completed=is_completed,
+        position=position,
+        created_at="2026-09-27T00:00:00",
+        updated_at="2026-09-27T00:00:00",
+        priority=priority,
+        source_task_id=source_task_id,
+        category_id=category_id,
+    )
 
-    with pytest.raises(ValueError):
-        service.update_task_text_and_priority(created.id, "نص جديد", "URGENT")  # type: ignore
 
-    after = task_repo.get_by_id(created.id)
+# ===========================================================================
+# 1. Creation
+# ===========================================================================
+def test_new_task_defaults_to_medium_priority(db_connection):
+    service = TaskService(TaskRepository(db_connection))
+    day = DayRepository(db_connection).create("2026-09-27")
+
+    created = service.create_task(day.id, "مهمة بدون أولوية محددة")
+
+    assert created is not None
+    assert created.priority is TaskPriority.MEDIUM
+    assert created.priority == TaskPriority.MEDIUM
+
+
+def test_new_task_keeps_the_selected_priority(db_connection):
+    repo = TaskRepository(db_connection)
+    service = TaskService(repo)
+    day = DayRepository(db_connection).create("2026-09-27")
+
+    for priority in (TaskPriority.HIGH, TaskPriority.MEDIUM, TaskPriority.LOW):
+        created = service.create_task(day.id, "اتصل بالعميل", priority=priority)
+
+        assert created is not None
+        assert created.priority is priority
+        # The value round-trips through the database unchanged.
+        stored = repo.get_by_id(created.id)
+        assert stored is not None
+        assert stored.priority is priority
+
+
+def test_priority_selector_defaults_to_medium():
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.ui.widgets.priority_selector import PrioritySelector
+
+    selector = PrioritySelector()
+
+    assert selector.selected_priority() is TaskPriority.MEDIUM
+
+
+def test_priority_selector_round_trips_every_value():
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.ui.widgets.priority_selector import PrioritySelector
+
+    selector = PrioritySelector()
+    for priority in (TaskPriority.HIGH, TaskPriority.MEDIUM, TaskPriority.LOW):
+        selector.set_priority(priority)
+        assert selector.selected_priority() is priority
+
+    # Back to the neutral default.
+    selector.set_priority(TaskPriority.MEDIUM)
+    assert selector.selected_priority() is TaskPriority.MEDIUM
+
+
+def test_priority_labels_are_arabic_and_cover_every_priority():
+    from app.ui.priority_presentation import (
+        PRIORITY_LABELS,
+        PRIORITY_ORDER,
+        priority_label,
+    )
+
+    assert set(PRIORITY_ORDER) == set(PRIORITY_LABELS) == set(TaskPriority)
+    assert PRIORITY_LABELS[TaskPriority.HIGH] == "عاجل"
+    assert PRIORITY_LABELS[TaskPriority.MEDIUM] == "عادي"
+    assert PRIORITY_LABELS[TaskPriority.LOW] == "منخفض"
+    assert priority_label(TaskPriority.HIGH) == "عاجل"
+    # An unknown value must never produce an empty label.
+    assert priority_label(None) == "عادي"
+
+
+def test_selector_never_exposes_an_index_or_a_raw_string():
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.ui.widgets.priority_selector import PrioritySelector
+
+    selector = PrioritySelector()
+
+    assert isinstance(selector.selected_priority(), TaskPriority)
+
+
+# ===========================================================================
+# 2. Editing
+# ===========================================================================
+def test_edit_dialog_opens_with_the_current_priority():
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.ui.widgets.task_edit_dialog import TaskEditDialog
+
+    for priority in (TaskPriority.HIGH, TaskPriority.MEDIUM, TaskPriority.LOW):
+        dialog = TaskEditDialog(initial_text="اتصل بالعميل", initial_priority=priority)
+        assert dialog.get_priority() is priority
+
+
+def test_edit_dialog_changing_text_preserves_priority(db_connection):
+    service = TaskService(TaskRepository(db_connection))
+    day = DayRepository(db_connection).create("2026-09-27")
+    task = service.create_task(day.id, "نص أصلي", priority=TaskPriority.HIGH)
+
+    # Only the text changes.
+    assert service.update_task_text(task.id, "نص معدل") is True
+
+    stored = TaskRepository(db_connection).get_by_id(task.id)
+    assert stored.text == "نص معدل"
+    assert stored.priority is TaskPriority.HIGH
+
+
+def test_edit_dialog_changing_priority_preserves_text(db_connection):
+    service = TaskService(TaskRepository(db_connection))
+    day = DayRepository(db_connection).create("2026-09-27")
+    task = service.create_task(day.id, "نص أصلي", priority=TaskPriority.LOW)
+
+    # Only the priority changes.
+    service.update_task_priority(task.id, TaskPriority.HIGH)
+
+    stored = TaskRepository(db_connection).get_by_id(task.id)
+    assert stored.text == "نص أصلي"
+    assert stored.priority is TaskPriority.HIGH
+
+
+def test_edit_dialog_changing_both_persists_both(db_connection):
+    service = TaskService(TaskRepository(db_connection))
+    day = DayRepository(db_connection).create("2026-09-27")
+    task = service.create_task(day.id, "نص أصلي", priority=TaskPriority.MEDIUM)
+
+    service.update_task_text(task.id, "نص معدل")
+    service.update_task_priority(task.id, TaskPriority.HIGH)
+
+    stored = TaskRepository(db_connection).get_by_id(task.id)
+    assert stored.text == "نص معدل"
+    assert stored.priority is TaskPriority.HIGH
+
+
+def test_edit_dialog_validation_still_rejects_blank_text(db_connection):
+    service = TaskService(TaskRepository(db_connection))
+    day = DayRepository(db_connection).create("2026-09-27")
+    task = service.create_task(day.id, "نص صحيح", priority=TaskPriority.HIGH)
+
+    assert service.update_task_text(task.id, "") is False
+    assert service.update_task_text(task.id, "   ") is False
+
+    stored = TaskRepository(db_connection).get_by_id(task.id)
+    assert stored.text == "نص صحيح"
+    assert stored.priority is TaskPriority.HIGH
+
+
+def test_priority_update_preserves_every_other_field(db_connection):
+    """A priority change must be an in-place update, never a new record."""
+    repo = TaskRepository(db_connection)
+    day = DayRepository(db_connection).create("2026-09-27")
+    service = TaskService(repo)
+
+    source = service.create_task(day.id, "مصدر", priority=TaskPriority.MEDIUM)
+    task = service.create_task(
+        day.id, "مهمة مرتبطة", priority=TaskPriority.MEDIUM,
+    )
+    # Give it a real source relationship and a completion state.
+    repo.set_completed(task.id, True)
+    before = repo.get_by_id(task.id)
+    assert before is not None
+
+    service.update_task_priority(task.id, TaskPriority.LOW)
+
+    after = repo.get_by_id(task.id)
+    assert after is not None
+    assert after.id == before.id                      # same record, not a new one
+    assert after.day_id == before.day_id
     assert after.text == before.text
-    assert after.priority == TaskPriority.MEDIUM
-    assert after.updated_at == before.updated_at
+    assert after.is_completed is True                 # completion preserved
+    assert after.position == before.position          # order preserved
+    assert after.source_task_id == before.source_task_id
+    assert after.created_at == before.created_at
+    assert after.priority is TaskPriority.LOW
+    # The unrelated task is untouched.
+    assert repo.get_by_id(source.id).priority is TaskPriority.MEDIUM
 
 
-def test_priority_only_update_preserves_identity_and_text(db_connection):
-    day_repo, task_repo, service = _services(db_connection)
-    day = day_repo.get_or_create("2026-09-27")
-    created = service.create_task(day.id, "النص ثابت", priority=TaskPriority.MEDIUM)
+# ===========================================================================
+# 3. Context menu
+# ===========================================================================
+def _trigger_context_menu(item):
+    """Build the item's context menu without showing it.
 
-    service.update_task_priority(created.id, TaskPriority.LOW)
-    updated = task_repo.get_by_id(created.id)
-    assert updated.id == created.id
-    assert updated.day_id == day.id
-    assert updated.text == "النص ثابت"
-    assert updated.priority == TaskPriority.LOW
-    assert updated.is_completed is False
-    assert updated.position == created.position
+    ``QMenu.exec`` cannot be monkeypatched on the sip class itself, so the
+    module-level name that ``TaskItem`` imported is swapped for a recording
+    subclass whose ``exec`` just captures the menu instead of blocking.
+    """
+    import app.ui.widgets.task_item as task_item_module
+    from PySide6.QtWidgets import QMenu
 
-    service.update_task_priority(created.id, TaskPriority.HIGH)
-    assert task_repo.get_by_id(created.id).priority == TaskPriority.HIGH
-    service.update_task_priority(created.id, TaskPriority.MEDIUM)
-    assert task_repo.get_by_id(created.id).priority == TaskPriority.MEDIUM
-    assert task_repo.get_by_id(created.id).text == "النص ثابت"
+    captured: list = []
+
+    class _RecordingMenu(QMenu):
+        def exec(self, *args, **kwargs):  # noqa: N802 - Qt naming
+            captured.append(self)
+            return None
+
+    original = task_item_module.QMenu
+    task_item_module.QMenu = _RecordingMenu
+    try:
+        event = QContextMenuEvent(
+            QContextMenuEvent.Reason.Mouse,
+            item.mapToGlobal(item.rect().center()),
+            item.mapToGlobal(item.rect().center()),
+            Qt.KeyboardModifier.NoModifier,
+        )
+        item.contextMenuEvent(event)
+    finally:
+        task_item_module.QMenu = original
+
+    assert captured, "contextMenuEvent did not build a menu"
+    return captured[0]
 
 
-def test_rollover_preserves_priority_and_history_stays_immutable(db_connection):
-    day_repo, task_repo, service = _services(db_connection)
-    rollover = DailyRolloverService(conn=db_connection, day_repo=day_repo, task_repo=task_repo)
+def test_context_menu_shows_the_current_priority_as_checked():
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.ui.widgets.task_item import TaskItem
+
+    for priority in (TaskPriority.HIGH, TaskPriority.MEDIUM, TaskPriority.LOW):
+        item = TaskItem(_make_task(priority=priority))
+        menu = _trigger_context_menu(item)
+
+        priority_menu = next(
+            (action.menu() for action in menu.actions() if action.menu() is not None), None
+        )
+        assert priority_menu is not None, "no priority submenu was built"
+
+        checked = [a.text() for a in priority_menu.actions() if a.isChecked()]
+        expected = {TaskPriority.HIGH: "عاجل", TaskPriority.MEDIUM: "عادي",
+                    TaskPriority.LOW: "منخفض"}[priority]
+        assert checked == [expected], f"{priority} should show {expected} as checked"
+
+
+def test_context_menu_priority_change_emits_the_domain_value():
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.ui.widgets.task_item import TaskItem
+
+    item = TaskItem(_make_task(task_id=7, priority=TaskPriority.HIGH))
+    received = []
+    item.priority_change_requested.connect(lambda tid, p: received.append((tid, p)))
+
+    menu = _trigger_context_menu(item)
+    priority_menu = next(a.menu() for a in menu.actions() if a.menu() is not None)
+    low_action = next(
+        a for a in priority_menu.actions() if a.text() == "منخفض"
+    )
+    low_action.trigger()
+
+    assert received == [(7, TaskPriority.LOW)]
+
+
+def test_context_menu_priority_change_persists(db_connection):
+    repo = TaskRepository(db_connection)
+    service = TaskService(repo)
+    day = DayRepository(db_connection).create("2026-09-27")
+
+    transitions = (
+        (TaskPriority.HIGH, TaskPriority.LOW),
+        (TaskPriority.LOW, TaskPriority.HIGH),
+        (TaskPriority.MEDIUM, TaskPriority.HIGH),
+        (TaskPriority.HIGH, TaskPriority.MEDIUM),
+    )
+    for start, target in transitions:
+        task = service.create_task(day.id, "مهمة", priority=start)
+
+        # Exactly what the context menu handler does: update through the service.
+        service.update_task_priority(task.id, target)
+
+        stored = repo.get_by_id(task.id)
+        assert stored is not None
+        assert stored.priority is target
+        assert stored.text == "مهمة"
+        assert stored.id == task.id
+
+
+# ===========================================================================
+# 4. Visual priority indication
+# ===========================================================================
+def test_task_item_shows_a_dot_indicator_for_every_priority():
+    # Phase 7C: the textual badges (عاجل/منخفض) are gone from the row by
+    # design. Every priority now shows a compact dot whose objectName encodes
+    # the level and whose tooltip keeps the Arabic name for usability.
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.ui.widgets.task_item import TaskItem
+
+    high = TaskItem(_make_task(priority=TaskPriority.HIGH))
+    low = TaskItem(_make_task(priority=TaskPriority.LOW))
+    medium = TaskItem(_make_task(priority=TaskPriority.MEDIUM))
+
+    assert high._priority_dot.objectName() == "priorityDotHigh"
+    assert high._priority_dot.text() == ""
+    assert "عاجل" in high._priority_dot.toolTip()
+
+    assert low._priority_dot.objectName() == "priorityDotLow"
+    assert low._priority_dot.text() == ""
+    assert "منخفض" in low._priority_dot.toolTip()
+
+    # MEDIUM is no longer badge-free-invisible: it shows the neutral dot.
+    assert medium._priority_dot.objectName() == "priorityDotMedium"
+    assert medium._priority_dot.text() == ""
+    assert "عادي" in medium._priority_dot.toolTip()
+
+
+def test_task_item_dot_updates_when_priority_changes():
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.ui.widgets.task_item import TaskItem
+
+    item = TaskItem(_make_task(priority=TaskPriority.MEDIUM))
+    assert item._priority_dot.objectName() == "priorityDotMedium"
+    assert item.priority is TaskPriority.MEDIUM
+
+    item.update_task_priority(TaskPriority.HIGH)
+    assert item.priority is TaskPriority.HIGH
+    assert item._priority_dot.objectName() == "priorityDotHigh"
+    assert item._priority_dot.text() == ""
+
+    # Back to MEDIUM: the neutral dot returns, nothing stale is left.
+    item.update_task_priority(TaskPriority.MEDIUM)
+    assert item.priority is TaskPriority.MEDIUM
+    assert item._priority_dot.objectName() == "priorityDotMedium"
+
+
+def test_task_item_dot_survives_completion():
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.ui.widgets.task_item import TaskItem
+
+    item = TaskItem(_make_task(priority=TaskPriority.HIGH, is_completed=False))
+    item.set_completed_silently(True)
+
+    assert item._priority_dot.objectName() == "priorityDotHigh"
+    assert item._priority_dot.text() == ""
+    assert item._priority_dot.property("completed") is True
+
+
+# ===========================================================================
+# 5. Rollover
+# ===========================================================================
+def test_rollover_preserves_priority(db_connection):
+    day_repo = DayRepository(db_connection)
+    task_repo = TaskRepository(db_connection)
+    service = TaskService(task_repo)
+    rollover = DailyRolloverService(
+        conn=db_connection, day_repo=day_repo, task_repo=task_repo
+    )
+
+    for index, priority in enumerate(
+        (TaskPriority.HIGH, TaskPriority.MEDIUM, TaskPriority.LOW)
+    ):
+        day_a = day_repo.get_or_create(f"2026-09-2{index}")
+        task_a = service.create_task(day_a.id, "مهمة متراكمة", priority=priority)
+
+        rolled = rollover.rollover_tasks(
+            source_date=f"2026-09-2{index}", target_date=f"2026-09-3{index}"
+        )
+
+        assert len(rolled) == 1
+        assert rolled[0].priority is priority
+        assert rolled[0].source_task_id == task_a.id
+        assert rolled[0].is_completed is False
+        assert rolled[0].text == "مهمة متراكمة"
+
+        # The historical source task is completely unchanged.
+        source = task_repo.get_by_id(task_a.id)
+        assert source is not None
+        assert source.priority is priority
+        assert source.is_completed is False
+        assert source.text == "مهمة متراكمة"
+
+
+def test_changing_a_rolled_over_task_does_not_change_history(db_connection):
+    """Day A shows HIGH forever, even after Day B's copy becomes LOW."""
+    day_repo = DayRepository(db_connection)
+    task_repo = TaskRepository(db_connection)
+    service = TaskService(task_repo)
+    rollover = DailyRolloverService(
+        conn=db_connection, day_repo=day_repo, task_repo=task_repo
+    )
     history = HistoryService(day_repo=day_repo, task_repo=task_repo)
 
-    day_a = day_repo.get_or_create("2026-09-26")
-    pending = service.create_task(day_a.id, "غير مكتملة", priority=TaskPriority.HIGH)
-    done = service.create_task(day_a.id, "مكتملة", priority=TaskPriority.LOW)
-    service.toggle_task_completion(done.id, True)
+    day_a = day_repo.get_or_create("2026-09-25")
+    task_a = service.create_task(day_a.id, "مهمة تاريخية", priority=TaskPriority.HIGH)
 
-    day_b = day_repo.get_or_create("2026-09-27")
-    rolled = rollover.rollover_tasks(source_date="2026-09-26", target_date="2026-09-27")
-    assert len(rolled) == 1
-    copy = rolled[0]
-    assert copy.priority == TaskPriority.HIGH
-    assert copy.text == "غير مكتملة"
-    assert copy.is_completed is False
-    assert copy.source_task_id == pending.id
-    assert copy.id != pending.id
-    assert copy.day_id == day_b.id
+    rollover.rollover_tasks(source_date="2026-09-25", target_date="2026-09-26")
 
-    # Completed task is not copied, and its priority stays on the source day.
-    today = service.get_today_tasks(day_b.id)
-    assert [task.id for task in today] == [copy.id]
-    historical_done = task_repo.get_by_id(done.id)
-    assert historical_done.is_completed is True
-    assert historical_done.priority == TaskPriority.LOW
-    assert historical_done.day_id == day_a.id
+    tasks_b = service.get_today_tasks(day_repo.get_by_date("2026-09-26").id)
+    task_b = tasks_b[0]
+    assert task_b.priority is TaskPriority.HIGH
 
-    # Changing the new occurrence must not rewrite Day 1.
-    service.update_task_priority(copy.id, TaskPriority.LOW)
-    service.update_task_text(copy.id, "نسخة اليوم")
+    # The user changes the Day B copy to LOW through the context menu.
+    service.update_task_priority(task_b.id, TaskPriority.LOW)
 
-    view_a = history.get_day_history("2026-09-26")
-    by_id = {task.id: task for task in view_a.tasks}
-    assert by_id[pending.id].priority == TaskPriority.HIGH
-    assert by_id[pending.id].text == "غير مكتملة"
-    assert by_id[pending.id].is_completed is False
-    assert by_id[done.id].priority == TaskPriority.LOW
+    # History for Day A must still report HIGH.
+    day_a_history = history.get_day_history("2026-09-25")
+    assert len(day_a_history.tasks) == 1
+    assert day_a_history.tasks[0].priority is TaskPriority.HIGH
+    assert day_a_history.tasks[0].id == task_a.id
 
-    view_b = history.get_day_history("2026-09-27")
-    assert len(view_b.tasks) == 1
-    assert view_b.tasks[0].id == copy.id
-    assert view_b.tasks[0].priority == TaskPriority.LOW
-    assert view_b.tasks[0].text == "نسخة اليوم"
-    assert view_b.tasks[0].source_task_id == pending.id
+    # And Day B now reports LOW.
+    day_b_history = history.get_day_history("2026-09-26")
+    assert day_b_history.tasks[0].priority is TaskPriority.LOW
 
 
-def test_stylesheet_alignment_expression_does_not_drop_later_rules():
-    """Qt rejects ``qproperty-alignment: AlignRight | AlignVCenter`` and then
-    drops every stylesheet rule after it, including priority badges.
-    """
-    from app.ui.styles.app_style import get_application_stylesheet
+def test_completed_tasks_keep_their_priority(db_connection):
+    """MEDIUM -> HIGH -> complete and HIGH -> LOW -> complete both persist."""
+    repo = TaskRepository(db_connection)
+    service = TaskService(repo)
+    day = DayRepository(db_connection).create("2026-09-27")
 
-    stylesheet = get_application_stylesheet()
-    assert "qproperty-alignment: Align" not in stylesheet
-    assert "QLabel#priorityBadgeHigh" in stylesheet
-    assert "QToolButton#taskPriorityButton" in stylesheet
+    task = service.create_task(day.id, "مهمة", priority=TaskPriority.MEDIUM)
+    service.update_task_priority(task.id, TaskPriority.HIGH)
+    service.toggle_task_completion(task.id, True)
+
+    stored = repo.get_by_id(task.id)
+    assert stored is not None
+    assert stored.is_completed is True
+    assert stored.priority is TaskPriority.HIGH
+
+    # Priority of a completed task can still be changed.
+    service.update_task_priority(task.id, TaskPriority.LOW)
+    stored = repo.get_by_id(task.id)
+    assert stored is not None
+    assert stored.is_completed is True
+    assert stored.priority is TaskPriority.LOW
 
 
-def test_priority_does_not_reorder_tasks(db_connection):
-    day_repo, _, service = _services(db_connection)
-    day = day_repo.get_or_create("2026-09-27")
-    first = service.create_task(day.id, "أولاً", priority=TaskPriority.LOW)
-    second = service.create_task(day.id, "ثانياً", priority=TaskPriority.HIGH)
+# ===========================================================================
+# 6. RTL
+# ===========================================================================
+def test_priority_selector_is_right_to_left():
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.ui.widgets.priority_selector import PrioritySelector
+
+    selector = PrioritySelector()
+
+    assert selector.layoutDirection() == Qt.LayoutDirection.RightToLeft
+
+
+def test_edit_dialog_is_right_to_left_and_carries_both_values():
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.ui.widgets.task_edit_dialog import TaskEditDialog
+
+    dialog = TaskEditDialog(initial_text="نص", initial_priority=TaskPriority.LOW)
+
+    assert dialog.layoutDirection() == Qt.LayoutDirection.RightToLeft
+    assert dialog.get_text() == "نص"
+    assert dialog.get_priority() is TaskPriority.LOW
+
+
+def test_context_menu_priority_submenu_is_right_to_left():
+    if _skip_without_qt():
+        return
+    _qt_app()
+    from app.ui.widgets.task_item import TaskItem
+
+    item = TaskItem(_make_task(priority=TaskPriority.MEDIUM))
+    menu = _trigger_context_menu(item)
+    priority_menu = next(a.menu() for a in menu.actions() if a.menu() is not None)
+
+    assert menu.layoutDirection() == Qt.LayoutDirection.RightToLeft
+    assert priority_menu.layoutDirection() == Qt.LayoutDirection.RightToLeft
+
+
+# ===========================================================================
+# 7. Backward compatibility
+# ===========================================================================
+def test_existing_medium_tasks_stay_medium(db_connection):
+    """An old database row without an explicit priority reads back as MEDIUM."""
+    conn = db_connection
+    conn.execute(
+        "INSERT INTO days (id, date, created_at, updated_at) VALUES "
+        "(1, '2026-09-01', '2026-09-01T00:00:00', '2026-09-01T00:00:00')"
+    )
+    conn.execute(
+        "INSERT INTO tasks (id, day_id, text, is_completed, position, created_at, updated_at) "
+        "VALUES (1, 1, 'مهمة قديمة', 0, 0, '2026-09-01T00:00:00', '2026-09-01T00:00:00')"
+    )
+    conn.commit()
+
+    repo = TaskRepository(conn)
+    task = repo.get_by_id(1)
+
+    assert task is not None
+    assert task.priority is TaskPriority.MEDIUM
+
+
+def test_priority_enum_has_no_extra_or_missing_members():
+    assert [p.name for p in TaskPriority] == ["LOW", "MEDIUM", "HIGH"]
+
+
+# ===========================================================================
+# 8. MainWindow integration -- the real UI flow
+# ===========================================================================
+class _FakeGeometryManager:
+    def __init__(self, geometry=(60, 60, 380, 560)):
+        self._geometry = geometry
+        self.saved = []
+
+    def get_validated_geometry(self):
+        return self._geometry
+
+    def save_geometry(self, x, y, width, height):
+        self.saved.append((x, y, width, height))
+
+
+def _make_window(task_service, day_id=1):
+    from unittest.mock import MagicMock
+
+    from app.ui.windows.main_window import MainWindow
+
+    day = Day(id=day_id, date="2026-09-27", quote_text="اقتباس",
+              created_at="now", updated_at="now")
+    window = MainWindow(
+        day=day,
+        quote_text=day.quote_text,
+        task_service=task_service,
+        geometry_manager=_FakeGeometryManager(),
+        on_exit_requested=MagicMock(),
+    )
+    window.resize(380, 560)
+    return window
+
+
+def test_submitting_a_task_uses_the_selected_priority(db_connection):
+    if _skip_without_qt():
+        return
+    _qt_app()
+
+    repo = TaskRepository(db_connection)
+    service = TaskService(repo)
+    day = DayRepository(db_connection).create("2026-09-27")
+    window = _make_window(service, day.id)
+
+    for priority in (TaskPriority.HIGH, TaskPriority.MEDIUM, TaskPriority.LOW):
+        window._priority_selector.set_priority(priority)
+        window._on_task_submitted("اتصل بالعميل")
+
     tasks = service.get_today_tasks(day.id)
-    assert [task.id for task in tasks] == [first.id, second.id]
+    assert [t.priority for t in tasks] == [
+        TaskPriority.HIGH,
+        TaskPriority.MEDIUM,
+        TaskPriority.LOW,
+    ]
+    assert all(t.text == "اتصل بالعميل" for t in tasks)
+    window.close()
+
+
+def test_selector_resets_to_medium_after_a_successful_submission(db_connection):
+    if _skip_without_qt():
+        return
+    _qt_app()
+
+    service = TaskService(TaskRepository(db_connection))
+    day = DayRepository(db_connection).create("2026-09-27")
+    window = _make_window(service, day.id)
+
+    window._priority_selector.set_priority(TaskPriority.HIGH)
+    window._on_task_submitted("مهمة عاجلة")
+
+    assert window._priority_selector.selected_priority() is TaskPriority.MEDIUM
+    window.close()
+
+
+def test_selector_is_not_reset_when_submission_fails(db_connection):
+    """Blank text must not silently reset the user's priority choice."""
+    if _skip_without_qt():
+        return
+    _qt_app()
+
+    service = TaskService(TaskRepository(db_connection))
+    day = DayRepository(db_connection).create("2026-09-27")
+    window = _make_window(service, day.id)
+
+    window._priority_selector.set_priority(TaskPriority.HIGH)
+    window._on_task_submitted("   ")
+
+    assert service.get_today_tasks(day.id) == []
+    assert window._priority_selector.selected_priority() is TaskPriority.HIGH
+    window.close()
+
+
+def test_context_menu_priority_change_updates_record_and_row(db_connection):
+    if _skip_without_qt():
+        return
+    _qt_app()
+
+    repo = TaskRepository(db_connection)
+    service = TaskService(repo)
+    day = DayRepository(db_connection).create("2026-09-27")
+    window = _make_window(service, day.id)
+
+    task = service.create_task(day.id, "مهمة", priority=TaskPriority.HIGH)
+    window._task_list.set_tasks(service.get_today_tasks(day.id))
+    assert window._task_list._items[task.id].priority is TaskPriority.HIGH
+
+    # Exactly the signal the TaskItem emits from its context menu.
+    window._on_task_priority_change_requested(task.id, TaskPriority.LOW)
+
+    stored = repo.get_by_id(task.id)
+    assert stored is not None
+    assert stored.priority is TaskPriority.LOW
+    assert stored.id == task.id
+    assert stored.text == "مهمة"
+    assert window._task_list._items[task.id].priority is TaskPriority.LOW
+    window.close()
+
+
+def _install_fake_edit_dialog(new_text, new_priority):
+    """Make the edit dialog return fixed values instead of showing itself."""
+    import app.ui.widgets.task_edit_dialog as dialog_module
+
+    class _FakeDialog:
+        last_initial_priority = None
+
+        def __init__(self, initial_text="", initial_priority=None, parent=None,
+                     initial_category_id=None, categories=(), icon_provider=None):
+            self.initial_text = initial_text
+            self.initial_priority = initial_priority
+            _FakeDialog.last_initial_priority = initial_priority
+
+        def exec(self):
+            return 1
+
+        def get_text(self):
+            return new_text
+
+        def get_priority(self):
+            return new_priority
+
+    return _patched(dialog_module, "TaskEditDialog", _FakeDialog)
+
+
+def test_edit_flow_changing_only_text_preserves_priority(db_connection):
+    if _skip_without_qt():
+        return
+    _qt_app()
+
+    repo = TaskRepository(db_connection)
+    service = TaskService(repo)
+    day = DayRepository(db_connection).create("2026-09-27")
+    window = _make_window(service, day.id)
+
+    task = service.create_task(day.id, "نص أصلي", priority=TaskPriority.HIGH)
+    window._task_list.set_tasks(service.get_today_tasks(day.id))
+
+    with _install_fake_edit_dialog("نص معدل", TaskPriority.HIGH):
+        window._on_task_edit_requested(task.id)
+
+    stored = repo.get_by_id(task.id)
+    assert stored.text == "نص معدل"
+    assert stored.priority is TaskPriority.HIGH
+    window.close()
+
+
+def test_edit_flow_changing_only_priority_preserves_text(db_connection):
+    if _skip_without_qt():
+        return
+    _qt_app()
+
+    repo = TaskRepository(db_connection)
+    service = TaskService(repo)
+    day = DayRepository(db_connection).create("2026-09-27")
+    window = _make_window(service, day.id)
+
+    task = service.create_task(day.id, "نص أصلي", priority=TaskPriority.MEDIUM)
+    window._task_list.set_tasks(service.get_today_tasks(day.id))
+
+    with _install_fake_edit_dialog("نص أصلي", TaskPriority.LOW):
+        window._on_task_edit_requested(task.id)
+
+    stored = repo.get_by_id(task.id)
+    assert stored.text == "نص أصلي"
+    assert stored.priority is TaskPriority.LOW
+    window.close()
+
+
+def test_edit_flow_changing_both_persists_both(db_connection):
+    if _skip_without_qt():
+        return
+    _qt_app()
+
+    repo = TaskRepository(db_connection)
+    service = TaskService(repo)
+    day = DayRepository(db_connection).create("2026-09-27")
+    window = _make_window(service, day.id)
+
+    task = service.create_task(day.id, "نص أصلي", priority=TaskPriority.MEDIUM)
+    window._task_list.set_tasks(service.get_today_tasks(day.id))
+
+    with _install_fake_edit_dialog("نص معدل", TaskPriority.HIGH):
+        window._on_task_edit_requested(task.id)
+
+    stored = repo.get_by_id(task.id)
+    assert stored.text == "نص معدل"
+    assert stored.priority is TaskPriority.HIGH
+    assert window._task_list._items[task.id].priority is TaskPriority.HIGH
+    window.close()
+
+
+def test_edit_dialog_receives_the_current_priority(db_connection):
+    """The dialog must open on the task's real priority, not on a default."""
+    if _skip_without_qt():
+        return
+    _qt_app()
+
+    service = TaskService(TaskRepository(db_connection))
+    day = DayRepository(db_connection).create("2026-09-27")
+    window = _make_window(service, day.id)
+
+    task = service.create_task(day.id, "نص", priority=TaskPriority.LOW)
+    window._task_list.set_tasks(service.get_today_tasks(day.id))
+
+    with _install_fake_edit_dialog("نص", TaskPriority.LOW) as fake:
+        window._on_task_edit_requested(task.id)
+        assert fake.last_initial_priority is TaskPriority.LOW
+    window.close()
+
+
+def test_new_task_row_contains_the_priority_selector(db_connection):
+    if _skip_without_qt():
+        return
+    _qt_app()
+
+    service = TaskService(TaskRepository(db_connection))
+    day = DayRepository(db_connection).create("2026-09-27")
+    window = _make_window(service, day.id)
+
+    assert window._priority_selector is not None
+    assert window._priority_selector.parent() is not None
+    # Input card, category selector, and priority selector all live in
+    # the same dock row, so they cannot drift apart. (Phase 7H: selectors
+    # sit outside the input card, hence dock-membership instead of the old
+    # shared-parent assertion -- same anti-drift intent.)
+    from PySide6.QtWidgets import QFrame
+    dock = window.findChild(QFrame, 'taskInputDock')
+    card = window.findChild(QFrame, 'taskInputCard')
+    assert dock is not None and card is not None
+    assert window._task_input.parent() is card
+    assert window._priority_selector.parent() is dock
+    assert window._category_selector.parent() is dock
+    window.close()

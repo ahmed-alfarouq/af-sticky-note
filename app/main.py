@@ -15,7 +15,14 @@ Wires together the real application flow for Phase 4A:
 from __future__ import annotations
 
 import logging
+import os
 import sys
+
+# Qt binding selection (v3 §1.4): must precede any import that initializes
+# QtAwesome or qtpy so the binding is never guessed. Set here (the earliest
+# application module on every startup path) and mirrored defensively in
+# app/ui/icons.py for direct imports.
+os.environ.setdefault("QT_API", "pyside6")
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QMessageBox
@@ -23,11 +30,15 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from app.config.settings import APP_NAME, ORG_NAME
 from app.core.services.daily_lifecycle_coordinator import DailyLifecycleCoordinator
 from app.core.services.daily_rollover_service import DailyRolloverService
+from app.core.services.category_service import CategoryService
 from app.core.services.quote_import_service import QuoteImportService
 from app.core.services.quote_service import NoAvailableQuotesError, QuoteService
+from app.core.services.report_service import ReportService
 from app.core.services.task_service import TaskService
 from app.database.connection import create_connection
+from app.database.category_repository import CategoryRepository
 from app.database.day_repository import DayRepository
+from app.database.report_repository import ReportRepository
 from app.database.migrations import MigrationError, apply_migrations
 from app.database.quote_repository import QuoteRepository
 from app.database.quote_rotation_state_repository import QuoteRotationStateRepository
@@ -37,6 +48,7 @@ from app.infrastructure.clock import local_today_iso
 from app.infrastructure.fonts import load_application_fonts
 from app.infrastructure.paths import get_database_path, get_fonts_dir, get_quotes_path
 from app.platform import get_platform_adapter
+from app.ui.category_icons import CategoryIconProvider
 from app.ui.windows.main_window import MainWindow
 
 logger = logging.getLogger(__name__)
@@ -60,12 +72,17 @@ def bootstrap_application(app: QApplication) -> MainWindow:
     # Repositories
     day_repo = DayRepository(conn)
     task_repo = TaskRepository(conn)
+    category_repo = CategoryRepository(conn)
     quote_repo = QuoteRepository(conn)
     quote_usage_repo = QuoteUsageRepository(conn)
     rotation_repo = QuoteRotationStateRepository(conn)
 
     # Services
-    task_service = TaskService(task_repo=task_repo)
+    task_service = TaskService(task_repo=task_repo, category_repo=category_repo)
+    category_service = CategoryService(category_repo=category_repo)
+    report_service = ReportService(
+        report_repo=ReportRepository(conn), category_repo=category_repo
+    )
     quote_import_service = QuoteImportService(quote_repo=quote_repo)
     quote_service = QuoteService(
         conn=conn,
@@ -107,6 +124,18 @@ def bootstrap_application(app: QApplication) -> MainWindow:
         window._allow_window_close = True
         app.quit()
 
+    # Rollover service is created before the window so the manual
+    # carry-forward menu action can close over it; the midnight coordinator
+    # reuses the same instance below. Yesterday -> today only: multi-day
+    # catch-up stays with the coordinator, and repeats are idempotent.
+    rollover_service = DailyRolloverService(conn=conn, day_repo=day_repo, task_repo=task_repo)
+
+    def _on_carry_forward_requested() -> int:
+        from datetime import date, timedelta
+
+        yesterday = (date.fromisoformat(today_str) - timedelta(days=1)).isoformat()
+        return len(rollover_service.rollover_tasks(yesterday, today_str))
+
     window = MainWindow(
         day=day,
         quote_text=quote_text,
@@ -115,6 +144,11 @@ def bootstrap_application(app: QApplication) -> MainWindow:
         history_service=history_service,
         startup_manager=platform_adapter.startup_manager,
         on_exit_requested=_on_app_exit_requested,
+        category_service=category_service,
+        icon_provider=CategoryIconProvider(),
+        report_service=report_service,
+        window_controller=platform_adapter.window_controller,
+        on_carry_forward_requested=_on_carry_forward_requested,
     )
 
     # 5. Initialize system tray if on Windows adapter and attach to desktop layer if supported
@@ -127,8 +161,6 @@ def bootstrap_application(app: QApplication) -> MainWindow:
             on_exit_requested=_on_app_exit_requested,
             parent=window,
         )
-        # Update adapter tray controller reference
-        platform_adapter._tray_controller = tray
         tray.show()
         app.aboutToQuit.connect(tray.hide)
 
@@ -137,7 +169,7 @@ def bootstrap_application(app: QApplication) -> MainWindow:
     window.raise_()
     window.activateWindow()
 
-    if platform_adapter.is_supported:
+    if platform_adapter.is_supported and window.is_pinned():
         try:
             hwnd = int(window.winId())
             attached = platform_adapter.window_controller.attach_to_desktop(hwnd)
@@ -146,7 +178,7 @@ def bootstrap_application(app: QApplication) -> MainWindow:
             logger.warning("Failed to attach to desktop layer: %s", exc)
 
     # 6. Wire runtime daily lifecycle coordinator (midnight rollover timer & resume listener)
-    rollover_service = DailyRolloverService(conn=conn, day_repo=day_repo, task_repo=task_repo)
+    # Reuses the rollover_service created above for the carry-forward action.
     coordinator = DailyLifecycleCoordinator(
         current_date=today_str,
         rollover_service=rollover_service,
@@ -154,7 +186,6 @@ def bootstrap_application(app: QApplication) -> MainWindow:
         day_repo=day_repo,
         task_service=task_service,
         main_window=window,
-        parent=window,
     )
     app.aboutToQuit.connect(coordinator.cleanup)
 

@@ -11,15 +11,42 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from app.core.models import Task, TaskPriority
+from app.core.models import DEFAULT_CATEGORY_ID, Task, TaskPriority
+from app.core.services.category_service import CategoryService
+from app.database.category_repository import CategoryRepository
 from app.database.task_repository import TaskRepository
 
 logger = logging.getLogger(__name__)
 
 
 class TaskService:
-    def __init__(self, task_repo: TaskRepository) -> None:
+    def __init__(
+        self,
+        task_repo: TaskRepository,
+        category_repo: Optional[CategoryRepository] = None,
+    ) -> None:
         self._task_repo = task_repo
+        self._category_repo = category_repo
+        # Single home for the "omitted -> default, explicit -> must exist"
+        # rule; kept optional so pre-category call sites keep working.
+        self._category_service = (
+            CategoryService(category_repo) if category_repo is not None else None
+        )
+
+    def _resolve_category(self, category_id: Optional[str]) -> str:
+        """Return a validated category id, defaulting to DEFAULT_CATEGORY_ID.
+
+        Raises ValueError for empty/non-string ids and for ids unknown to the
+        category repository (when one is wired). Never silently substitutes:
+        callers pass None (or omit) for the default, anything else must exist.
+        """
+        if self._category_service is not None:
+            return self._category_service.resolve_category_id(category_id)
+        if category_id is None:
+            return DEFAULT_CATEGORY_ID
+        if not isinstance(category_id, str) or not category_id:
+            raise ValueError(f"Invalid task category: {category_id!r}")
+        return category_id
 
     def get_today_tasks(self, day_id: int) -> List[Task]:
         """Fetch all tasks for the given day, ordered by position ascending."""
@@ -30,11 +57,14 @@ class TaskService:
         day_id: int,
         text: str,
         priority: TaskPriority = TaskPriority.MEDIUM,
+        category_id: Optional[str] = None,
     ) -> Optional[Task]:
         """Validate non-empty text, strip whitespace, and persist.
 
         Returns the created Task on success.
         Returns None if text is empty or whitespace-only (no record created).
+        Omitting category_id assigns the default category; an explicit but
+        unknown category_id raises ValueError.
         """
         if text is None:
             return None
@@ -49,7 +79,9 @@ class TaskService:
             except (ValueError, TypeError):
                 raise ValueError(f"Invalid task priority: {priority}")
 
-        return self._task_repo.create(day_id=day_id, text=cleaned, priority=priority)
+        category = self._resolve_category(category_id)
+
+        return self._task_repo.create(day_id=day_id, text=cleaned, priority=priority, category_id=category)
 
     def toggle_task_completion(self, task_id: int, is_completed: bool) -> None:
         """Update the completion status of a task."""
@@ -63,6 +95,17 @@ class TaskService:
             except (ValueError, TypeError):
                 raise ValueError(f"Invalid task priority: {priority}")
         self._task_repo.update_priority(task_id=task_id, priority=priority)
+
+    def update_task_category(self, task_id: int, category_id: str) -> None:
+        """Update the category of a task.
+
+        Unknown or empty ids raise ValueError; unlike create_task, None is
+        rejected here because an update always names its target category.
+        """
+        if category_id is None:
+            raise ValueError("Invalid task category: None")
+        category = self._resolve_category(category_id)
+        self._task_repo.update_category(task_id=task_id, category_id=category)
 
     def delete_task(self, task_id: int) -> None:
         """Remove a task by ID."""

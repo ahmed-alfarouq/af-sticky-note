@@ -26,6 +26,8 @@ def test_platform_protocols_contracts():
     assert not win_ctrl.is_attached()
     assert not win_ctrl.attach_to_desktop(12345)
     assert not win_ctrl.detach_from_desktop(12345)
+    assert win_ctrl.set_pinned(12345, True) is False
+    assert win_ctrl.set_pinned(12345, False) is False
 
     startup_mgr = NoOpStartupManager()
     assert isinstance(startup_mgr, StartupManager)

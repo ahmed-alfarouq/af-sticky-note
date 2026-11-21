@@ -89,3 +89,9 @@ class WindowsDesktopWindowController(DesktopWindowController):
 
     def is_attached(self) -> bool:
         return self._attached
+
+    def set_pinned(self, window_handle: int, pinned: bool) -> bool:
+        """Apply the pinned desktop-tool-window state or restore normal styles."""
+        if pinned:
+            return self.attach_to_desktop(window_handle)
+        return self.detach_from_desktop(window_handle)

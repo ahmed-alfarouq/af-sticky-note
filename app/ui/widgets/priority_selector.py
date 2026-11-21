@@ -1,70 +1,134 @@
-"""Compact priority control: one button, one Arabic label, one menu.
+"""The Qt widget for choosing a task priority.
 
-A QComboBox drop-down paints as a separate native box under RTL and
-looks detached from its label. A tool button with an instant menu keeps
-the current value (عاجل / عادي / منخفض) inside a single Daily Sticky control.
+The Arabic labels themselves live in :mod:`app.ui.priority_presentation`, which
+is Qt-free, so the enum -> label mapping has exactly one home and can be tested
+without a GUI toolkit.
 """
 from __future__ import annotations
 
 from typing import Dict, Optional
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QActionGroup
-from PySide6.QtWidgets import QMenu, QSizePolicy, QToolButton, QWidget
+from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QPixmap
+from PySide6.QtWidgets import QComboBox, QSizePolicy, QWidget
 
 from app.core.models import TaskPriority
-from app.ui.priority_presentation import PRIORITY_CHOICES, label_for
+from app.ui.priority_presentation import (
+    DEFAULT_TASK_PRIORITY,
+    PRIORITY_COLORS,
+    PRIORITY_LABELS,
+    PRIORITY_ORDER,
+    priority_label,
+)
+from app.ui.widgets.combo_popup import fit_popup_to_contents
+
+__all__ = [
+    "PrioritySelector",
+    "PRIORITY_LABELS",
+    "PRIORITY_ORDER",
+    "priority_label",
+    "priority_dot_icon",
+]
+
+_DOT_ICON_CACHE: Dict[str, QIcon] = {}
 
 
-class PrioritySelector(QToolButton):
-    """Shows the current TaskPriority and lets the user pick another."""
+def _dot_icon(color_hex: str) -> QIcon:
+    """12px filled dot used as a dropdown decoration (cached per color)."""
+    cached = _DOT_ICON_CACHE.get(color_hex)
+    if cached is not None:
+        return cached
+    pixmap = QPixmap(12, 12)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    try:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(color_hex))
+        painter.drawEllipse(1, 1, 10, 10)
+    finally:
+        painter.end()
+    icon = QIcon(pixmap)
+    _DOT_ICON_CACHE[color_hex] = icon
+    return icon
 
-    def __init__(
-        self,
-        selected: TaskPriority = TaskPriority.MEDIUM,
-        parent: Optional[QWidget] = None,
-    ) -> None:
+
+def priority_dot_icon(priority: TaskPriority) -> QIcon:
+    """Cached 12px dot icon in the priority's color."""
+    return _dot_icon(PRIORITY_COLORS[priority])
+
+
+class PrioritySelector(QComboBox):
+    """Compact combo box for choosing a task priority.
+
+    Exposes and accepts :class:`TaskPriority` values only -- never an index and
+    never a raw string -- so callers never have to convert anything themselves.
+    """
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self.setObjectName("taskPriorityButton")
-        self.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-        # Text direction only. Physical placement is decided by the parent row.
+        self.setObjectName("prioritySelector")
+        self.setAccessibleDescription(
+            "اختر أولوية المهمة: "
+            + " أو ".join(priority_label(p) for p in PRIORITY_ORDER)
+        )
+        self.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        # Compact: never wider than its own contents, so it cannot compete
+        # with the task text for space.
+        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.setAccessibleName("أولوية المهمة")
-        self.setAccessibleDescription("اختر عاجل أو عادي أو منخفض. الافتراضي عادي")
-        self.setToolTip("أولوية المهمة")
 
-        self._priority = TaskPriority.MEDIUM
-        self._menu = QMenu(self)
-        self._menu.setObjectName("taskPriorityMenu")
-        self._menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-        self.setMenu(self._menu)
+        # Each row: colored dot, Arabic label, and the TaskPriority itself as
+        # user data. HIGH reads red in the dropdown.
+        for row, priority in enumerate(PRIORITY_ORDER):
+            self.addItem(priority_dot_icon(priority), priority_label(priority), priority)
+            if priority is TaskPriority.HIGH:
+                self.setItemData(
+                    row, QBrush(QColor("#E57373")), Qt.ItemDataRole.ForegroundRole
+                )
 
-        self._group = QActionGroup(self._menu)
-        self._group.setExclusive(True)
-        self._actions: Dict[TaskPriority, QAction] = {}
-        for priority in PRIORITY_CHOICES:
-            action = QAction(label_for(priority), self._menu)
-            action.setCheckable(True)
-            action.setData(priority.value)
-            self._group.addAction(action)
-            self._menu.addAction(action)
-            action.triggered.connect(
-                lambda checked=False, chosen=priority: self.set_priority(chosen)
-            )
-            self._actions[priority] = action
+        self.setCurrentIndex(self._index_of(DEFAULT_TASK_PRIORITY))
+        self._refresh_accessible_name()
+        self.currentIndexChanged.connect(lambda _index: self._refresh_accessible_name())
 
-        self.set_priority(selected)
+    def showPopup(self) -> None:  # noqa: N802 - Qt naming
+        """Widen the popup view to fit the widest item before showing."""
+        fit_popup_to_contents(self)
+        super().showPopup()
 
-    def priority(self) -> TaskPriority:
-        return self._priority
+    # ------------------------------------------------------------------
+    # Value access
+    # ------------------------------------------------------------------
+    def _index_of(self, priority: TaskPriority) -> int:
+        for index in range(self.count()):
+            if self.itemData(index) == priority:
+                return index
+        return 0
 
-    def set_priority(self, priority: TaskPriority) -> None:
-        resolved = priority if isinstance(priority, TaskPriority) else TaskPriority(priority)
-        self._priority = resolved
-        # Chevron is part of the label, not a separate drop-down box.
-        self.setText(f"{label_for(resolved)}  ▾")
-        self._actions[resolved].setChecked(True)
+    def selected_priority(self) -> TaskPriority:
+        """Return the currently chosen priority (default level when unreadable)."""
+        data = self.currentData()
+        if isinstance(data, TaskPriority):
+            return data
+        try:
+            return TaskPriority(data)
+        except (ValueError, TypeError):
+            return DEFAULT_TASK_PRIORITY
+
+    def set_priority(self, priority: Optional[TaskPriority]) -> None:
+        """Select ``priority`` silently -- no signals, no side effects."""
+        target = priority if isinstance(priority, TaskPriority) else DEFAULT_TASK_PRIORITY
+        index = self._index_of(target)
+        if index == self.currentIndex():
+            self._refresh_accessible_name()
+            return
+        self.blockSignals(True)
+        try:
+            self.setCurrentIndex(index)
+        finally:
+            self.blockSignals(False)
+        self._refresh_accessible_name()
+
+    def _refresh_accessible_name(self) -> None:
+        """Accessible name carries the current label (v3 §14)."""
+        self.setAccessibleName(f"الأولوية: {priority_label(self.selected_priority())}")

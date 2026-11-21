@@ -33,6 +33,15 @@ class DesktopWindowController(Protocol):
         """Check if the window is currently attached to the desktop layer."""
         ...
 
+    def set_pinned(self, window_handle: int, pinned: bool) -> bool:
+        """Apply the pinned (desktop-widget) or unpinned (normal-window) state.
+
+        Returns True if the requested state was applied, False otherwise.
+        Callers must keep their visible state in sync with the result and
+        roll back on False (never display an unapplied state).
+        """
+        ...
+
 
 @runtime_checkable
 class StartupManager(Protocol):

@@ -7,8 +7,9 @@ one place if it ever needs to control "now".
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import Tuple
+from typing import Optional, Tuple
 
 ARABIC_GREGORIAN_MONTHS = (
     "يناير",
@@ -39,6 +40,89 @@ HIJRI_MONTHS = (
     "ذو القعدة",
     "ذو الحجة",
 )
+
+#: Monday-first to match :meth:`datetime.date.weekday`.
+ARABIC_WEEKDAYS = (
+    "الاثنين",
+    "الثلاثاء",
+    "الأربعاء",
+    "الخميس",
+    "الجمعة",
+    "السبت",
+    "الأحد",
+)
+
+
+@dataclass(frozen=True)
+class DateDisplay:
+    """Domain-layer date contract (v3 §5.1): raw calendar data, no widgets.
+
+    The UI formats strings from these fields and never derives calendar
+    data itself. All numerals are Western digits; Arabic presentation
+    (month/weekday names) comes from the shared tables above.
+    """
+
+    iso_date: str
+    weekday_ar: str
+    hijri_day: int
+    hijri_month_name: str
+    hijri_year: int
+    gregorian_day: int
+    gregorian_month_name: str
+    gregorian_year: int
+
+
+def date_display(iso_date: str) -> DateDisplay | None:
+    """Build the :class:`DateDisplay` for an ISO date, or None when invalid.
+
+    Invalid input yields None (callers fall back to raw display) instead of
+    raising, matching :func:`get_date_parts` degradation behavior.
+    """
+    try:
+        parts = [int(p) for p in iso_date.split("-")]
+        if len(parts) != 3:
+            raise ValueError(iso_date)
+        g_year, g_month, g_day = parts
+        current = date(g_year, g_month, g_day)
+    except Exception:
+        return None
+    hijri_year, hijri_month, hijri_day = gregorian_to_hijri(g_year, g_month, g_day)
+    return DateDisplay(
+        iso_date=iso_date,
+        weekday_ar=ARABIC_WEEKDAYS[current.weekday()],
+        hijri_day=hijri_day,
+        hijri_month_name=HIJRI_MONTHS[hijri_month - 1] if 1 <= hijri_month <= 12 else str(hijri_month),
+        hijri_year=hijri_year,
+        gregorian_day=g_day,
+        gregorian_month_name=ARABIC_GREGORIAN_MONTHS[g_month - 1] if 1 <= g_month <= 12 else str(g_month),
+        gregorian_year=g_year,
+    )
+
+
+def get_date_parts(iso_date: str) -> Tuple[str, str, str, str]:
+    """Split an ISO date into date-header parts (Qt-free, pure addition).
+
+    Returns ``(day_number, weekday_ar, gregorian_month_year, hijri)`` using
+    the same month tables and Hijri converter as :func:`format_dual_calendar_date`
+    (whose output and behavior are unchanged). Invalid input degrades to the
+    raw string in the day field and blanks elsewhere instead of raising.
+    """
+    try:
+        parts = [int(p) for p in iso_date.split("-")]
+        if len(parts) != 3:
+            raise ValueError(iso_date)
+        g_year, g_month, g_day = parts
+        current = date(g_year, g_month, g_day)
+    except Exception:
+        return (iso_date, "", "", "")
+    day_number = str(g_day)
+    weekday_ar = ARABIC_WEEKDAYS[current.weekday()]
+    month_name = ARABIC_GREGORIAN_MONTHS[g_month - 1] if 1 <= g_month <= 12 else str(g_month)
+    gregorian_month_year = f"{month_name} {g_year}"
+    hijri_year, hijri_month, hijri_day = gregorian_to_hijri(g_year, g_month, g_day)
+    h_month = HIJRI_MONTHS[hijri_month - 1] if 1 <= hijri_month <= 12 else str(hijri_month)
+    hijri = f"{hijri_day} {h_month} {hijri_year} هـ"
+    return (day_number, weekday_ar, gregorian_month_year, hijri)
 
 
 def utc_now_iso() -> str:
@@ -115,8 +199,10 @@ def gregorian_to_hijri(year: int, month: int, day: int) -> Tuple[int, int, int]:
     return iy_h, im_h, id_h
 
 
-def format_dual_calendar_date(iso_date: str) -> str:
+def format_dual_calendar_date(iso_date: str, hijri_first: bool = False) -> str:
     """Format an ISO date string (YYYY-MM-DD) into a dual Gregorian & Hijri Arabic date line.
+
+    The Gregorian date leads unless ``hijri_first`` is set.
 
     Example:
         '2026-09-22' -> '22 سبتمبر 2026 • 10 ربيع الآخر 1448 هـ'
@@ -146,10 +232,11 @@ def format_dual_calendar_date(iso_date: str) -> str:
         qdate = QDate(g_year, g_month, g_day)
         if qdate.isValid():
             cal = QCalendar(QCalendar.System.IslamicCivil)
-            if cal.isDateValid(cal.year(qdate), cal.month(qdate), cal.day(qdate)):
-                hijri_year = cal.year(qdate)
-                hijri_month = cal.month(qdate)
-                hijri_day = cal.day(qdate)
+            parts = cal.partsFromDate(qdate)
+            if cal.isDateValid(parts.year, parts.month, parts.day):
+                hijri_year = parts.year
+                hijri_month = parts.month
+                hijri_day = parts.day
     except Exception:
         pass
 
@@ -164,4 +251,6 @@ def format_dual_calendar_date(iso_date: str) -> str:
     )
     hijri_str = f"{hijri_day} {h_month_name} {hijri_year} هـ"
 
+    if hijri_first:
+        return f"{hijri_str}  •  {gregorian_str}"
     return f"{gregorian_str}  •  {hijri_str}"

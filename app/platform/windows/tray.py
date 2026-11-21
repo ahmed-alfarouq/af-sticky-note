@@ -31,6 +31,21 @@ from app.platform.interfaces import SystemTrayController
 logger = logging.getLogger(__name__)
 
 
+def _tray_available() -> bool:
+    """Whether a native tray query is safe in this process.
+
+    ``QSystemTrayIcon`` statics require a ``QApplication`` instance; without
+    one Qt dereferences a null application object and the process dies with
+    an access violation (not a catchable exception) -- observed offscreen
+    when the controller is constructed standalone before any application.
+    """
+    if QSystemTrayIcon is None or QApplication is None:
+        return False
+    if QApplication.instance() is None:
+        return False
+    return QSystemTrayIcon.isSystemTrayAvailable()
+
+
 def _load_tray_icon() -> Optional[QIcon]:
     """Load application logo as tray icon, falling back to synthesized icon if missing."""
     if QIcon is None:
@@ -98,7 +113,7 @@ class WindowsSystemTrayController(SystemTrayController):
 
     def _init_tray(self) -> None:
         """Initialize QSystemTrayIcon and context menu."""
-        if QSystemTrayIcon is None or not QSystemTrayIcon.isSystemTrayAvailable():
+        if not _tray_available():
             logger.info("QSystemTrayIcon is not available in the current environment.")
             return
 
@@ -185,9 +200,7 @@ class WindowsSystemTrayController(SystemTrayController):
 
     def is_available(self) -> bool:
         """Check if system tray is supported in the current environment."""
-        if QSystemTrayIcon is None:
-            return False
-        return QSystemTrayIcon.isSystemTrayAvailable()
+        return _tray_available()
 
     def show(self) -> None:
         """Display the system tray icon."""

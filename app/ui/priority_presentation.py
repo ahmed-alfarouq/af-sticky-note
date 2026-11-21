@@ -1,59 +1,56 @@
-"""Presentation helpers for TaskPriority.
+"""The Arabic presentation of task priority -- with no Qt dependency at all.
 
-This is display vocabulary only. Persistence and validation continue to
-use the domain enum ``TaskPriority`` — there is no second priority model.
+This is the single boundary between the ``TaskPriority`` domain enum and what
+the user sees: label, one-line hint, and color. It deliberately contains no
+Qt imports so that the mapping can be used (and tested) everywhere, including
+the backend suite that runs without PySide6 installed.
+
+No Arabic label is ever stored in the database; the enum value is what is
+persisted.
+
+Levels, most urgent first: HIGH = "عاجل", MEDIUM = "متوسط", LOW = "عادي".
+"عادي" (LOW) is the everyday level with no special priority, so it is the
+default for new tasks in the UI.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel
+from typing import Dict, Optional, Tuple
 
 from app.core.models import TaskPriority
 
-# User-facing Arabic labels. MEDIUM is the neutral/default wording.
-PRIORITY_LABELS_AR = {
+PRIORITY_LABELS: Dict[TaskPriority, str] = {
     TaskPriority.HIGH: "عاجل",
-    TaskPriority.MEDIUM: "عادي",
-    TaskPriority.LOW: "منخفض",
+    TaskPriority.MEDIUM: "متوسط",
+    TaskPriority.LOW: "عادي",
 }
 
-# Selector and menu order: urgent, normal, low.
-PRIORITY_CHOICES = (
+#: One-line explanation shown under each label in the priority picker.
+PRIORITY_HINTS: Dict[TaskPriority, str] = {
+    TaskPriority.HIGH: "يظهر أولاً في القائمة",
+    TaskPriority.MEDIUM: "مهم لكن غير مستعجل",
+    TaskPriority.LOW: "بدون أولوية خاصة",
+}
+
+#: The one color of each level (dots in the task row, picker, and chip).
+PRIORITY_COLORS: Dict[TaskPriority, str] = {
+    TaskPriority.HIGH: "#f08a6c",
+    TaskPriority.MEDIUM: "#f0b24a",
+    TaskPriority.LOW: "#5b8fd6",
+}
+
+#: Display order: most urgent first.
+PRIORITY_ORDER: Tuple[TaskPriority, ...] = (
     TaskPriority.HIGH,
     TaskPriority.MEDIUM,
     TaskPriority.LOW,
 )
 
-
-def label_for(priority: TaskPriority) -> str:
-    """Return the Arabic label for a priority value."""
-    resolved = priority if isinstance(priority, TaskPriority) else TaskPriority(priority)
-    return PRIORITY_LABELS_AR[resolved]
+#: Priority a new task starts with in the UI.
+DEFAULT_TASK_PRIORITY = TaskPriority.LOW
 
 
-def configure_priority_badge(badge: QLabel, priority: TaskPriority) -> None:
-    """Show the existing HIGH/LOW badge, or hide it for neutral MEDIUM.
-
-    Visual language is unchanged from v0.5.0:
-    HIGH → "عاجل", LOW → "منخفض", MEDIUM → no badge.
-    """
-    resolved = priority if isinstance(priority, TaskPriority) else TaskPriority(priority)
-    if resolved is TaskPriority.HIGH:
-        badge.setText(PRIORITY_LABELS_AR[TaskPriority.HIGH])
-        badge.setObjectName("priorityBadgeHigh")
-        badge.setVisible(True)
-    elif resolved is TaskPriority.LOW:
-        badge.setText(PRIORITY_LABELS_AR[TaskPriority.LOW])
-        badge.setObjectName("priorityBadgeLow")
-        badge.setVisible(True)
-    else:
-        badge.clear()
-        badge.setObjectName("priorityBadgeMedium")
-        badge.setVisible(False)
-    style = badge.style()
-    if style is not None:
-        style.unpolish(badge)
-        style.polish(badge)
-
-
-
+def priority_label(priority: Optional[TaskPriority]) -> str:
+    """Return the Arabic label for ``priority`` (default level when unknown)."""
+    if isinstance(priority, TaskPriority):
+        return PRIORITY_LABELS[priority]
+    return PRIORITY_LABELS[DEFAULT_TASK_PRIORITY]

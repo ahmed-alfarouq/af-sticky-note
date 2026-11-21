@@ -17,25 +17,37 @@ Implements the project constitution palette:
 from __future__ import annotations
 
 from app.infrastructure.fonts import get_default_font_family
+from app.ui.styles.add_task_bar_style import get_add_task_bar_stylesheet
+from app.ui.styles.archive_style import get_archive_stylesheet
+from app.ui.styles.option_sheet_style import get_option_sheet_stylesheet
+from app.ui.styles.screen_style import get_screen_stylesheet
+from app.ui.styles.settings_style import get_settings_stylesheet
+from app.ui.styles.task_item_style import get_task_item_stylesheet
+from app.ui.styles.task_list_style import get_task_list_stylesheet
+from app.ui import theme
 
-# Palette tokens
+# Palette tokens: names matching the v3 spec are aliases of app.ui.theme
+# (the single source of truth). The remaining names are pre-v3 legacy
+# surfaces kept byte-identical until their owning widget phases reconcile
+# them against the spec palette; they live only here, never duplicated.
 COLOR_NAVY = "#172033"
-COLOR_TRUST = "#4F7CAC"
-COLOR_SOFT = "#8FB8D8"
-COLOR_BACKGROUND = "#0F141D"
-COLOR_SURFACE = "#171E29"
+COLOR_TRUST = theme.TRUST
+COLOR_SOFT = theme.SOFT
+COLOR_BACKGROUND = theme.BG
+COLOR_SURFACE = theme.SURFACE
 COLOR_STICKY_PAPER = "#1E2636"
 COLOR_STICKY_BORDER = "#2E3A4E"
 COLOR_CARD_SURFACE = "#161E2B"
 COLOR_CARD_BORDER = "#242F42"
-COLOR_TEXT_PRIMARY = "#F2F5F8"
-COLOR_TEXT_SECONDARY = "#98A2B3"
+COLOR_TEXT_PRIMARY = theme.TEXT
+COLOR_TEXT_SECONDARY = theme.TEXT_SECONDARY
 COLOR_TEXT_COMPLETED = "#616F85"
-COLOR_BORDER = "#283241"
-COLOR_SUCCESS = "#6FAF8F"
-COLOR_WARNING_PIN = "#D9A441"
+COLOR_BORDER = theme.BORDER
+COLOR_SUCCESS = theme.SUCCESS
+COLOR_WARNING_PIN = theme.AMBER
+COLOR_URGENT = theme.AMBER_RED
 COLOR_INPUT_BG = "#131924"
-COLOR_FOCUS_RING = "#4F7CAC"
+COLOR_FOCUS_RING = theme.TRUST
 
 
 def get_application_stylesheet() -> str:
@@ -49,78 +61,79 @@ def get_application_stylesheet() -> str:
         color: {COLOR_TEXT_PRIMARY};
     }}
 
-    /* Main Window background acts as the desktop/board */
+    /* The window itself must stay fully transparent: the paper silhouette
+       (rounded top corners + organic bottom edge) is painted by PaperSurface
+       along a shared path, and the window mask is derived from that same
+       path. Any background painted here would show up as a rectangle
+       outside the paper and would defeat both the mask and the
+       anti-aliased edge. */
     QMainWindow {{
-        background-color: {COLOR_BACKGROUND};
+        background: transparent;
     }}
 
-    /* The Sticky Note paper container - tactile rounded paper surface */
+    /* The Sticky Note paper surface. Its silhouette and border are painted
+       by PaperSurface from app/ui/note_shape.py, so no rectangular
+       background, border or border-radius belongs here. */
     QFrame#stickyNoteFrame {{
-        background-color: {COLOR_STICKY_PAPER};
-        border: 1px solid {COLOR_STICKY_BORDER};
-        border-radius: 14px;
+        background: transparent;
+        border: none;
     }}
 
-    /* Decorative Pin Element - refined physical metallic pin */
-    QLabel#pinWidget {{
-        background: qradialgradient(cx:0.4, cy:0.4, radius:0.8, fx:0.3, fy:0.3, stop:0 #F0C466, stop:0.6 {COLOR_WARNING_PIN}, stop:1 #A36B15);
-        border: 1.5px solid #82530C;
+    /* Top bar (v3 §4): pin toggle, drag grip, archive/settings/close.
+       Icon colors are picked in code (IconButton); backgrounds live here. */
+    QToolButton#pinButton {{
+        background-color: transparent;
+        border: none;
         border-radius: 8px;
-        min-width: 16px;
-        max-width: 16px;
-        min-height: 16px;
-        max-height: 16px;
     }}
 
-    /* Top-Left Action Buttons (Settings, History, Exit) */
-    QPushButton#headerIconButton {{
+    QToolButton#pinButton[active="true"] {{
+        background-color: rgba(217, 164, 65, 0.12);
+    }}
+
+    QToolButton#pinButton[active="true"]:hover {{
+        background-color: rgba(217, 164, 65, 0.18);
+    }}
+
+    QToolButton#pinButton[active="true"]:pressed {{
+        background-color: rgba(217, 164, 65, 0.24);
+    }}
+
+    QToolButton#pinButton:focus {{
+        border: 2px solid #8FB8D8;
+        border-radius: 8px;
+    }}
+
+    QLabel#gripPill {{
+        background-color: #283241;
+        border-radius: 2px;
+        min-width: 32px;
+        max-width: 32px;
+        min-height: 4px;
+        max-height: 4px;
+    }}
+
+    QToolButton#headerIconButton {{
         background-color: transparent;
-        color: {COLOR_TEXT_SECONDARY};
         border: none;
-        border-radius: 4px;
-        font-family: Arial, "Segoe UI", sans-serif;
-        font-size: 13px;
-        font-weight: normal;
-        min-width: 22px;
-        max-width: 22px;
-        min-height: 22px;
-        max-height: 22px;
-        padding: 0px;
+        border-radius: 8px;
     }}
 
-    QPushButton#headerIconButton:hover {{
-        background-color: rgba(79, 124, 172, 0.22);
-        color: {COLOR_SOFT};
+    QToolButton#headerIconButton:hover {{
+        background-color: #171E29;
     }}
 
-    QPushButton#headerIconButton:pressed {{
-        background-color: rgba(79, 124, 172, 0.42);
-        color: #FFFFFF;
+    QToolButton#headerIconButton:pressed {{
+        background-color: #1c2533;
     }}
 
-    QPushButton#exitButton {{
+    QToolButton#headerIconButton:disabled {{
         background-color: transparent;
-        color: {COLOR_TEXT_SECONDARY};
-        border: none;
-        border-radius: 4px;
-        font-family: Arial, sans-serif;
-        font-size: 13px;
-        font-weight: bold;
-        min-width: 22px;
-        max-width: 22px;
-        min-height: 22px;
-        max-height: 22px;
-        padding: 0px;
     }}
 
-    QPushButton#exitButton:hover {{
-        background-color: rgba(235, 87, 87, 0.22);
-        color: #FF7575;
-    }}
-
-    QPushButton#exitButton:pressed {{
-        background-color: rgba(235, 87, 87, 0.42);
-        color: #FFA8A8;
+    QToolButton#headerIconButton:focus {{
+        border: 2px solid #8FB8D8;
+        border-radius: 8px;
     }}
 
     /* Header / Date Card */
@@ -133,61 +146,82 @@ def get_application_stylesheet() -> str:
         background: transparent;
     }}
 
-    /* Daily Quote Card */
+    /* Daily Quote Card (history/settings windows) */
     QFrame#quoteCard {{
         background-color: {COLOR_CARD_SURFACE};
         border: 1px solid {COLOR_CARD_BORDER};
         border-radius: 10px;
     }}
 
-    QLabel#quoteTextLabel {{
-        color: {COLOR_TEXT_PRIMARY};
-        font-size: 13.5px;
-        font-weight: 500;
-        line-height: 1.55;
-        font-style: italic;
-        background: transparent;
-    }}
-
-    /* Task List Scroll Area */
-    QScrollArea#taskListScroll {{
+    /* Date header block (Phase 7D): one coherent visual unit. The Hijri day
+    number dominates the hero row, the Hijri month/year steps down beside it,
+    and the Gregorian row closes the block. All sizes are integers (see note
+    above). */
+    QFrame#dateHeader {{
         background-color: transparent;
         border: none;
     }}
 
-    QWidget#taskListContainer {{
-        background-color: transparent;
-    }}
-
-    /* Individual Task Row Frame */
-    QFrame#taskItemFrame {{
-        background-color: {COLOR_CARD_SURFACE};
-        border: 1px solid {COLOR_CARD_BORDER};
-        border-radius: 8px;
-        margin-top: 1px;
-        margin-bottom: 1px;
-    }}
-
-    QFrame#taskItemFrame:hover {{
-        border: 1px solid #334259;
-        background-color: #1A2332;
-    }}
-
-    QLabel#taskTextLabel {{
-        /* 130 = AlignRight | AlignVCenter. A flags expression is rejected and drops later rules. */
-        qproperty-alignment: 130;
+    QLabel#dayNumber {{
         color: {COLOR_TEXT_PRIMARY};
-        font-size: 14px;
-        font-weight: 500;
-        line-height: 1.4;
+        font-size: 72px;
+        font-weight: bold;
+        background: transparent;
     }}
 
-    QLabel#taskTextLabelCompleted {{
-        qproperty-alignment: 130;
-        color: {COLOR_TEXT_COMPLETED};
+    QLabel#hijriDateLabel {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: 20px;
+        font-weight: bold;
+    }}
+
+    QLabel#gregorianDateLabel {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 15px;
+        font-weight: normal;
+        background: transparent;
+    }}
+
+    QWidget#progressRing {{
+        background: transparent;
+    }}
+
+    /* Quiet quote section (Phase 7D): no card, secondary text, clearly
+    below the date in the hierarchy but still readable. */
+    QFrame#quoteSection {{
+        background-color: transparent;
+        border: none;
+    }}
+
+    QLabel#quoteRule {{
+        background-color: {COLOR_TRUST};
+        border: none;
+    }}
+
+    QLabel#quoteTextLabel {{
+        /* Keep this value an integer number of pixels: Qt's QSS parser
+           silently discards a fractional font-size (13.5px renders at the
+           platform default, ~9pt) and emits no warning at all
+           (tests/test_app_stylesheet.py). */
         font-size: 14px;
-        text-decoration: line-through;
-        line-height: 1.4;
+        color: {COLOR_TEXT_SECONDARY};
+        font-weight: normal;
+        line-height: 27px;
+        background: transparent;
+    }}
+
+    /* Empty-day and all-done states (v3 §7.1). */
+    QLabel#emptyStateTitle {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: 16px;
+        font-weight: bold;
+        background: transparent;
+    }}
+
+    QLabel#emptyStateBody {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 14px;
+        background: transparent;
     }}
 
     /* Priority Badges */
@@ -209,6 +243,126 @@ def get_application_stylesheet() -> str:
         font-size: 11px;
         font-weight: 600;
         padding: 3px 8px;
+    }}
+
+    /* Priority Selector (new-task row + edit dialog).
+       Deliberately compact and quiet: it must not compete with the task text.
+       The drop-down arrow is hidden because the combo is small and the value
+       is short; the whole control is still clickable and keyboard reachable. */
+    QComboBox#prioritySelector {{
+        background-color: {COLOR_INPUT_BG};
+        color: {COLOR_TEXT_SECONDARY};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 5px;
+        padding: 4px 8px;
+        font-size: 12px;
+        /* Qt reads min-width / max-width as the *content* width and then adds
+           this rule's padding and border, so the laid-out control is ~18px
+           wider than the numbers below. The QSizePolicy.Maximum +
+           AdjustToContents set in PrioritySelector are what actually keep the
+           control compact; these are only outer bounds. */
+        min-width: 68px;
+        max-width: 92px;
+    }}
+
+    QComboBox#prioritySelector:hover {{
+        border-color: {COLOR_BORDER};
+        color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    QComboBox#prioritySelector:focus {{
+        border: 2px solid {COLOR_FOCUS_RING};
+    }}
+
+    QComboBox#prioritySelector::drop-down {{
+        border: none;
+        width: 14px;
+        subcontrol-origin: padding;
+        subcontrol-position: center left;
+    }}
+
+    QComboBox#prioritySelector::down-arrow {{
+        image: none;
+        width: 0px;
+        height: 0px;
+    }}
+
+    /* The popup is a separate top-level window, so it needs its own
+       rules; the context-menu priority submenu inherits the global QMenu
+       styling below. */
+    QComboBox#prioritySelector QAbstractItemView {{
+        background-color: {COLOR_CARD_SURFACE};
+        color: {COLOR_TEXT_PRIMARY};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 5px;
+        padding: 4px;
+        outline: none;
+    }}
+
+    QComboBox#prioritySelector QAbstractItemView::item {{
+        padding: 5px 8px;
+        border-radius: 4px;
+        min-height: 22px;
+    }}
+
+    QComboBox#prioritySelector QAbstractItemView::item:selected {{
+        background-color: rgba(79, 124, 172, 0.28);
+        color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    /* Category selector: same compact quiet combo as the priority selector,
+    slightly wider bounds for icon + Arabic name. No new colours. */
+    QComboBox#categorySelector {{
+        background-color: {COLOR_INPUT_BG};
+        color: {COLOR_TEXT_SECONDARY};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 5px;
+        padding: 4px 8px;
+        font-size: 12px;
+        min-width: 84px;
+        max-width: 130px;
+    }}
+
+    QComboBox#categorySelector:hover {{
+        border-color: {COLOR_BORDER};
+        color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    QComboBox#categorySelector:focus {{
+        border: 2px solid {COLOR_FOCUS_RING};
+    }}
+
+    QComboBox#categorySelector::drop-down {{
+        border: none;
+        width: 14px;
+        subcontrol-origin: padding;
+        subcontrol-position: center left;
+    }}
+
+    QComboBox#categorySelector::down-arrow {{
+        image: none;
+        width: 0px;
+        height: 0px;
+    }}
+
+    QComboBox#categorySelector QAbstractItemView {{
+        background-color: {COLOR_CARD_SURFACE};
+        color: {COLOR_TEXT_PRIMARY};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 5px;
+        padding: 4px;
+        outline: none;
+    }}
+
+    QComboBox#categorySelector QAbstractItemView::item {{
+        padding: 5px 8px;
+        border-radius: 4px;
+        min-height: 22px;
+    }}
+
+    QComboBox#categorySelector QAbstractItemView::item:selected {{
+        background-color: rgba(79, 124, 172, 0.28);
+        color: {COLOR_TEXT_PRIMARY};
     }}
 
     /* Checkbox Styling with clear accessible states */
@@ -240,31 +394,22 @@ def get_application_stylesheet() -> str:
         border: 2px solid {COLOR_FOCUS_RING};
     }}
 
+    /* Completion must not recolor the row border (Issue 7): checked and
+    unchecked indicators share border/background; only the artwork differs
+    (per-checkbox override in TaskItem from the real right-icon asset). */
     QCheckBox::indicator:checked {{
-        background-color: {COLOR_SUCCESS};
-        border-color: {COLOR_SUCCESS};
-    }}
-
-    /* Task Input Field
-       Alignment is set in code. A flags expression here is rejected by Qt's
-       QSS parser and discards this rule (and can discard rules after it). */
-    QLineEdit#taskInputField {{
         background-color: {COLOR_INPUT_BG};
-        color: {COLOR_TEXT_PRIMARY};
-        border: 1.5px solid {COLOR_CARD_BORDER};
-        border-radius: 8px;
-        padding: 8px 4px;
-        font-size: 13.5px;
-        min-height: 22px;
+        border-color: {COLOR_TEXT_SECONDARY};
+        image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='white' d='M3 6l2 2 4-4'/></svg>");
     }}
 
-    QLineEdit#taskInputField:hover {{
-        border-color: #384860;
+    QCheckBox::indicator:checked:hover {{
+        background-color: #18202F;
+        border-color: {COLOR_TEXT_SECONDARY};
     }}
 
-    QLineEdit#taskInputField:focus {{
+    QCheckBox::indicator:checked:focus {{
         border: 2px solid {COLOR_FOCUS_RING};
-        background-color: #151C28;
     }}
 
     QWidget#taskInputRow {{
@@ -351,24 +496,185 @@ def get_application_stylesheet() -> str:
         background-color: #141B26;
     }}
 
-    QPushButton#historyNavButton {{
+    /* Weekly dashboard (Phase 7F): same dark-compact language as the rest. */
+    QDialog#dashboardWindow {{
+        background-color: {COLOR_BACKGROUND};
+    }}
+
+    QScrollArea#dashboardScroll, QWidget#dashboardContent {{
         background-color: transparent;
+        border: none;
+    }}
+
+    QLabel#dashboardTitle {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: 17px;
+        font-weight: 700;
+        background: transparent;
+    }}
+
+    QLabel#dashboardRangeLabel {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 12px;
+        font-weight: 500;
+        background: transparent;
+    }}
+
+    QPushButton#dashboardPresetButton {{
+        background-color: {COLOR_CARD_SURFACE};
         color: {COLOR_TEXT_SECONDARY};
         border: 1px solid {COLOR_CARD_BORDER};
-        border-radius: 5px;
-        padding: 4px 10px;
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 12px;
+        font-weight: 500;
+    }}
+
+    QPushButton#dashboardPresetButton:hover {{
+        border-color: {COLOR_FOCUS_RING};
+        color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    QPushButton#dashboardPresetButton:checked {{
+        background-color: rgba(79, 124, 172, 0.30);
+        border-color: {COLOR_FOCUS_RING};
+        color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    QDateEdit#dashboardDateEdit {{
+        background-color: {COLOR_INPUT_BG};
+        color: {COLOR_TEXT_PRIMARY};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 6px;
+        padding: 4px 6px;
         font-size: 12px;
     }}
 
-    QPushButton#historyNavButton:hover {{
-        background-color: #1E2738;
-        color: {COLOR_TEXT_PRIMARY};
-        border-color: {COLOR_SOFT};
+    QDateEdit#dashboardDateEdit:focus {{
+        border: 2px solid {COLOR_FOCUS_RING};
     }}
 
-    QPushButton#historyNavButton:disabled {{
-        color: #4D5768;
-        border-color: #1E2533;
+    QDateEdit#dashboardDateEdit::drop-down {{
+        border: none;
+        width: 14px;
+    }}
+
+    QCalendarWidget QWidget {{
+        background-color: {COLOR_CARD_SURFACE};
+        color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    QCalendarWidget QAbstractItemView {{
+        background-color: {COLOR_CARD_SURFACE};
+        color: {COLOR_TEXT_PRIMARY};
+        selection-background-color: rgba(79, 124, 172, 0.40);
+        selection-color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    QPushButton#dashboardApplyButton {{
+        background-color: {COLOR_FOCUS_RING};
+        color: #FFFFFF;
+        border: none;
+        border-radius: 6px;
+        padding: 5px 14px;
+        font-size: 12px;
+        font-weight: 600;
+    }}
+
+    QPushButton#dashboardApplyButton:hover {{
+        background-color: #5D8DBE;
+    }}
+
+    QPushButton#dashboardApplyButton:pressed {{
+        background-color: #436E9B;
+    }}
+
+    QLabel#dashboardErrorLabel {{
+        color: #E57373;
+        font-size: 12px;
+        font-weight: 500;
+        background: transparent;
+    }}
+
+    QFrame#dashboardSummary {{
+        background-color: {COLOR_CARD_SURFACE};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 10px;
+    }}
+
+    QLabel#dashboardStatValue {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: 18px;
+        font-weight: 700;
+        background: transparent;
+    }}
+
+    QLabel#dashboardStatLabel {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 11px;
+        font-weight: 500;
+        background: transparent;
+    }}
+
+    QFrame#categoryCard {{
+        background-color: {COLOR_CARD_SURFACE};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 8px;
+    }}
+
+    QLabel#categoryCardIcon {{
+        background: transparent;
+        border: none;
+    }}
+
+    QLabel#categoryCardName {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: 13px;
+        font-weight: 600;
+        background: transparent;
+    }}
+
+    QLabel#categoryCardStats {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 12px;
+        font-weight: 500;
+        background: transparent;
+    }}
+
+    QProgressBar#categoryCardBar {{
+        background-color: {COLOR_CARD_BORDER};
+        border: none;
+        border-radius: 3px;
+    }}
+
+    QProgressBar#categoryCardBar::chunk {{
+        background-color: {COLOR_FOCUS_RING};
+        border-radius: 3px;
+    }}
+
+    QLabel#dashboardLegendDone {{
+        color: {COLOR_SOFT};
+        font-size: 11px;
+        font-weight: 600;
+        background: transparent;
+    }}
+
+    QLabel#dashboardLegendTodo {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 11px;
+        font-weight: 500;
+        background: transparent;
+    }}
+
+    QWidget#dashboardChart {{
+        background: transparent;
+    }}
+
+    QLabel#dashboardEmptyLabel {{
+        color: {COLOR_TEXT_COMPLETED};
+        font-size: 13px;
+        font-weight: 500;
+        background: transparent;
     }}
 
     /* Context Menus */
@@ -403,6 +709,38 @@ def get_application_stylesheet() -> str:
         margin: 4px 6px;
     }}
 
+    /* Pinned-mode application menu (v3 §10): same panel language. */
+    QMenu#appContextMenu {{
+        background-color: #1c2533;
+        border: 1px solid {COLOR_BORDER};
+        border-radius: 12px;
+        padding: 4px;
+    }}
+
+    QMenu#appContextMenu::item {{
+        background-color: transparent;
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: 14px;
+        padding: 8px 12px;
+        border-radius: 8px;
+    }}
+
+    QMenu#appContextMenu::item:selected {{
+        background-color: {COLOR_BORDER};
+        color: {COLOR_TEXT_PRIMARY};
+    }}
+
+    QMenu#appContextMenu::item:disabled {{
+        color: #4A586B;
+        background-color: transparent;
+    }}
+
+    QMenu#appContextMenu::separator {{
+        height: 1px;
+        background: {COLOR_BORDER};
+        margin: 4px 8px;
+    }}
+
     /* Subtle scrollbar */
     QScrollBar:vertical {{
         background: transparent;
@@ -423,5 +761,63 @@ def get_application_stylesheet() -> str:
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
         height: 0px;
     }}
-    """
 
+    /* Task edit dialog (Phase 6E). These three object names were set in code
+       but had no rules, so the dialog's field labels and both action buttons
+       fell back to platform-default Qt widgets. Save is the primary action
+       and uses the palette's trust blue; Cancel stays neutral like the other
+       dialog close buttons. */
+    QLabel#taskEditLabel {{
+        color: {COLOR_TEXT_SECONDARY};
+        font-size: 13px;
+        font-weight: 500;
+        background: transparent;
+    }}
+
+    QPushButton#saveButton {{
+        background-color: {COLOR_TRUST};
+        color: #FFFFFF;
+        border: 1px solid {COLOR_TRUST};
+        border-radius: 6px;
+        padding: 6px 18px;
+        font-size: 13px;
+        font-weight: 600;
+    }}
+
+    QPushButton#saveButton:hover {{
+        background-color: #5D8DBE;
+        border-color: #5D8DBE;
+    }}
+
+    QPushButton#saveButton:pressed {{
+        background-color: #436E9B;
+        border-color: #436E9B;
+    }}
+
+    QPushButton#cancelButton {{
+        background-color: {COLOR_CARD_SURFACE};
+        color: {COLOR_TEXT_PRIMARY};
+        border: 1px solid {COLOR_CARD_BORDER};
+        border-radius: 6px;
+        padding: 6px 18px;
+        font-size: 13px;
+        font-weight: 500;
+    }}
+
+    QPushButton#cancelButton:hover {{
+        background-color: #1E2738;
+        border-color: {COLOR_FOCUS_RING};
+    }}
+
+    QPushButton#cancelButton:pressed {{
+        background-color: #141B26;
+    }}
+
+    {get_task_item_stylesheet()}
+    {get_task_list_stylesheet()}
+    {get_option_sheet_stylesheet()}
+    {get_add_task_bar_stylesheet()}
+    {get_screen_stylesheet()}
+    {get_settings_stylesheet()}
+    {get_archive_stylesheet()}
+    """
